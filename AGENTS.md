@@ -1,143 +1,137 @@
 # AGENTS.md
 
-This file provides operational guidance for humans and automated agents
-working in the `mmw-review-system` repository. Sections marked with a `TODO`
-are intentional placeholders — fill them in as the project matures, but do
-not silence them silently.
+本文件为 `mmw-review-system` 仓库的人类与自动化代理提供操作指引。
+标注 `TODO` 的小节是有意保留的占位项——后续随项目推进逐步补全，
+**不要悄悄抹掉**它们。
+
+> 本说明文档使用中文撰写（核心开发者均为中国成员）。但**目录名、
+> 文件名、变量名、命令行片段、占位符 ${PLACEHOLDER} 等标识符保持英文**，
+> 以兼容跨平台、CI 容器与 GitHub 生态。
 
 ---
 
-## 1. Project overview
+## 1. 项目概览
 
-- **Purpose** — _TODO: one-paragraph description of what mmw-review-system
-  does, who its users are, and what success looks like._
-- **Primary language** — TypeScript.
-- **Repository conventions**:
-  - Code formatted with the configured formatter (`TODO: prettier`).
-  - Lint passes are required before merge (see CI).
-  - Use [Conventional Commits](https://www.conventionalcommits.org/) for
-    commit messages: `feat:`, `fix:`, `chore:`, `docs:`, etc.
-
----
-
-## 2. Quick reference for agents
-
-| Concern | Command |
-|---------|---------|
-| Install deps | `TODO: npm ci / pnpm install / yarn install` |
-| Type-check | `TODO: tsc --noEmit` |
-| Run unit tests | `TODO: npm test` |
-| Run linter | `TODO: npm run lint` |
-| Build production bundle | `TODO: npm run build` |
-| Local dev server | `TODO: npm run dev` |
-
-> **Performance rule for agents**: never run `npm install` (or the equivalent)
-> repeatedly in a session. Use the cached `node_modules/` from the prior step.
+- **项目目的** —— _TODO：用一段话说明 mmw-review-system 是什么、
+  服务于哪些用户、成功标准是什么。_
+- **主语言** —— TypeScript。
+- **仓库约定**：
+  - 代码由配置的格式化器格式化（`TODO：prettier`）。
+  - 合并前必须通过 Lint 检查（参见 CI）。
+  - 提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh)：
+    `feat:`、`fix:`、`chore:`、`docs:` 等。
 
 ---
 
-## 3. Directory layout
+## 2. 代理快速参考
 
-_TODO: replace with the real layout once scaffolding lands._
+| 项目 | 命令 |
+|------|------|
+| 安装依赖 | `TODO：npm ci / pnpm install / yarn install` |
+| 类型检查 | `TODO：tsc --noEmit` |
+| 运行单元测试 | `TODO：npm test` |
+| 运行 Lint | `TODO：npm run lint` |
+| 构建生产产物 | `TODO：npm run build` |
+| 本地开发服务器 | `TODO：npm run dev` |
+
+> **性能建议（针对代理）**：在同一会话中不要反复执行 `npm install`
+> （或等价命令）。请复用上一步已经准备好的 `node_modules/` 缓存。
+
+---
+
+## 3. 目录结构
+
+_TODO：脚手架落地后用真实结构替换。_
 
 ```text
 .
-├── src/                  # Application source
-├── tests/                # Test suites
-├── docs/                 # Long-form documentation
-├── .github/              # Workflows, templates, Renovate notes
-├── AGENTS.md             # This file
-├── renovate.json         # Dependency-update policy (Renovate)
-└── secrets/              # NOT in git. Local-only sensitive notes.
+├── src/                  # 应用程序源码
+├── tests/                # 测试代码
+├── docs/                 # 长篇文档（部署手册等）
+├── .github/              # Workflow、PR/Issue 模板、Renovate 说明
+├── AGENTS.md             # 当前文件
+├── renovate.json         # 依赖更新策略（Renovate）
+└── secrets/              # 不入 git，仅本地保存的敏感说明
 ```
 
-> The `secrets/` directory is git-ignored. See §4 for what it should
-> contain and why.
+> `secrets/` 目录被 `.gitignore` 忽略，详见第 4 节。
 
 ---
 
-## 4. Production deployment — sensitive information policy
+## 4. 生产部署 —— 敏感信息策略
 
-The production environment is shared, sensitive, and serves real users.
-This repository **does not store production endpoints, credentials, or
-key material in tracked files**. Instead, the project keeps a single
-local-only file:
+生产环境多人共享、敏感、面向真实用户。本仓库**不在被 git 追踪的
+文件中存放生产端点、凭据或密钥**。取而代之，项目仅在以下位置保留
+**命名引用**：
 
-- **Path (in the working copy only)**: `secrets/PROD-SERVER.md`
-- **Git status**: ignored via `/secrets/` in `.gitignore`
-- **Authoritative values for**: `PROD_HOST`, `PROD_PORT`, `PROD_USER`,
-  `PROD_DEPLOY_KEY`, `CLOUD_VENDOR`
+- **本地文件路径**：`secrets/PROD-SERVER.md`
+- **Git 状态**：由 `.gitignore` 中的 `/secrets/` 忽略
+- **承载的变量**：`PROD_HOST`、`PROD_PORT`、`PROD_USER`、
+  `PROD_DEPLOY_KEY`、`CLOUD_VENDOR`
 
-If `secrets/PROD-SERVER.md` is **not present** in your checkout:
+如果你的 checkout 中**没有** `secrets/PROD-SERVER.md`：
 
-1. Ask another developer to share it out-of-band (encrypted message,
-   in-person handoff, password manager — **not** in chat, issues, or PRs).
-2. Do **not** attempt to discover the production host by cloning someone
-   else's machine or scraping public sources.
-3. Do **not** invent values. Deployments whose targets are unknown must
-   be blocked, not guessed.
+1. 请通过带外方式（加密消息、线下交接、密码管理器 —— **不要**用
+   聊天、工单、PR 评论）向另一位项目开发者索取。
+2. **不要**通过翻看他人机器或爬取公开来源来推断生产地址。
+3. **不要**编造值。目标未知的部署必须被阻断，而不是猜。
 
-### 4.1 Production environment summary (variables only — values in secrets/)
+### 4.1 生产环境摘要（仅变量名，具体值见 secrets/）
 
-| Property | Placeholder | Defined in |
-|----------|-------------|------------|
-| **Cloud vendor** | `${CLOUD_VENDOR}` | `secrets/PROD-SERVER.md` |
-| **Public address** | `${PROD_HOST}` | `secrets/PROD-SERVER.md` |
-| **OS user** | `${PROD_USER}` | `secrets/PROD-SERVER.md` |
-| **SSH port** | `${PROD_PORT}` | `secrets/PROD-SERVER.md` |
-| **Process manager** | _TODO: pick one — `pm2` or `systemd` (or both)_ | this file, §4.1 |
-| **Deploy directory** | _TODO: pick one — e.g. `/opt/mmw-review-system`_ | this file, §4.1 |
-| **Deploy key** | `${PROD_DEPLOY_KEY}` (named reference only) | `secrets/PROD-SERVER.md` |
-| **Source of truth** | `main` branch, deployed via CI on push | this file, §4.1 |
+| 属性 | 占位符 | 定义位置 |
+|------|--------|----------|
+| **云厂商** | `${CLOUD_VENDOR}` | `secrets/PROD-SERVER.md` |
+| **公网地址** | `${PROD_HOST}` | `secrets/PROD-SERVER.md` |
+| **登录用户** | `${PROD_USER}` | `secrets/PROD-SERVER.md` |
+| **SSH 端口** | `${PROD_PORT}` | `secrets/PROD-SERVER.md` |
+| **进程管理器** | _TODO：在 `pm2` 与 `systemd` 中二选一（或两者都用）_ | 本文件 §4.1 |
+| **部署目录** | _TODO：例如 `/opt/mmw-review-system`_ | 本文件 §4.1 |
+| **部署密钥** | `${PROD_DEPLOY_KEY}`（仅作为命名引用） | `secrets/PROD-SERVER.md` |
+| **唯一来源** | `main` 分支，由 CI 在 push 时部署 | 本文件 §4.1 |
 
-### 4.2 Authoritative connection string template
+### 4.2 权威连接字符串模板
 
 ```text
 ssh ${PROD_USER}@${PROD_HOST} -p ${PROD_PORT}
 ```
 
-- The SSH private key is **not** stored in this repository. The first time
-  you (or your agent) need to connect, ask the project's developers for
-  the location of the key file. Never paste key material into issues,
-  PRs, comments, or chat transcripts.
-- If you do not already have access to `PROD_DEPLOY_KEY` **and**
-  `secrets/PROD-SERVER.md`, **stop and ask** — do not invent an
-  alternative path.
+- SSH 私钥**不**存放在本仓库。第一次需要连接时，向项目开发者索取
+  密钥文件的位置。**任何情况下都不要把私钥粘贴进工单、PR、评论、
+  聊天记录。**
+- 如果你既没有 `PROD_DEPLOY_KEY`，也没有 `secrets/PROD-SERVER.md`，
+  **停下来询问，不要自行另辟路径**。
 
-### 4.3 Default deployment rules
+### 4.3 默认部署规则
 
-1. **CI is the source of truth for deploys.** Pushing to `main` triggers the
-   deploy workflow defined in `.github/workflows/`. Do not hand-deploy from a
-   local laptop unless there is an active incident and CI is unavailable.
-2. **Deploy only `main`.** Feature branches must be merged first.
-3. **Never run destructive commands on the production host** (`rm -rf`,
-   `dd`, `mkfs`, force-pushing, etc.) without a second pair of eyes and a
-   written rollback plan.
-4. **State must be recorded.** Every deploy — successful or not — appends a
-   row to `docs/deployment-log.md` with: timestamp, commit SHA, operator,
-   result.
+1. **CI 是部署的唯一真理来源**。推送到 `main` 将触发
+   `.github/workflows/` 下的部署 workflow。仅在生产故障且 CI 不可用
+   时，才允许本地手动部署。
+2. **只部署 `main`**。功能分支必须先合并。
+3. **绝不在生产主机上执行破坏性命令**（`rm -rf`、`dd`、`mkfs`、
+   `git push --force` 等），除非有第二人复核并已写好回滚方案。
+4. **必须留下部署记录**。每次部署（无论成败）都要在
+   `docs/deployment-log.md` 追加一行：时间戳、commit SHA、操作者、结果。
 
-### 4.4 Pre-deploy checklist (agent)
+### 4.4 部署前清单（针对代理）
 
-Before you tell CI to deploy, or before any manual SSH action:
+在你让 CI 部署、或手动 SSH 之前：
 
-- [ ] `secrets/PROD-SERVER.md` exists in your local checkout and is the
-      current version shared by the team.
-- [ ] `main` is green on the required CI checks.
-- [ ] You can name the commit SHA being deployed.
-- [ ] Migrations, if any, have been rehearsed on staging.
-- [ ] The `PROD_DEPLOY_KEY` referenced above is loaded for the deployer
-      (agent or CI runner).
+- [ ] 本地 checkout 中存在 `secrets/PROD-SERVER.md`，且已是团队
+      分享的最新版本。
+- [ ] `main` 在必需的 CI 检查上为绿。
+- [ ] 你能明确说出正在部署的 commit SHA。
+- [ ] 若有迁移，已在 staging 排练过。
+- [ ] `PROD_DEPLOY_KEY` 已为部署者（代理或 CI runner）加载。
 
-### 4.5 Rollback
+### 4.5 回滚
 
-- Automated rollback strategy: _TODO — once the deploy workflow is written._
-- Manual rollback command template:
+- 自动回滚策略：_TODO —— 等部署 workflow 写好后补全。_
+- 手动回滚命令模板：
 
   ```bash
-  # Pseudo-rollback. Replace `${PROCESS_MANAGER}` and `${DEPLOY_DIR}` with
-  # the values chosen once the deployment tooling lands. The host/port/user
-  # are loaded from secrets/PROD-SERVER.md; never hard-coded here.
+  # 伪命令模板。${PROCESS_MANAGER} 和 ${DEPLOY_DIR} 等待 PM 与部署目录
+  # 决策后替换。${PROD_HOST}/${PROD_USER}/${PROD_PORT} 由 secrets/PROD-SERVER.md
+  # 注入，绝不硬编码在这里。
   # shellcheck disable=SC2154
   ssh "${PROD_USER}@${PROD_HOST}" -p "${PROD_PORT}" \
     '${PROCESS_MANAGER} restart mmw-review-system \
@@ -146,44 +140,39 @@ Before you tell CI to deploy, or before any manual SSH action:
 
 ---
 
-## 5. Secrets & sensitive data
+## 5. 密钥与敏感数据
 
-- **Do not commit** any of the following to this repository in any form, even
-  temporarily: SSH private keys, `.env` files containing credentials, API
-  tokens, database URLs with embedded passwords, internal certificates,
-  **production host/IP/port/user**.
-- The single allowed home for production metadata is `secrets/PROD-SERVER.md`,
-  which is `.gitignore`d and lives only in local checkouts.
-- Use GitHub Actions secrets (preferred) for CI. Local development uses
-  `.env.local` (already in `.gitignore` for Node projects).
-- The `PROD_DEPLOY_KEY` referenced above is a **named reference** — not a
-  value. The actual key file lives outside this repository.
-
----
-
-## 6. What an agent must NOT do
-
-- Do not commit secrets (see §5).
-- Do not write production host/IP/port/user into any tracked file — including
-  this one. Use `secrets/PROD-SERVER.md` instead.
-- Do not push to `main` directly — always via PR (branch-protection rules
-  are expected to be turned on; if they are not, raise an issue).
-- Do not modify `renovate.json` in a way that would change automerge to
-  `true` for major bumps.
-- Do not expand the Renovate config to other `mmw-devs` repositories
-  without explicit owner approval — that rollout is opt-in per repo.
-- Do not run `npm publish` / `pnpm publish` from a local checkout.
-- Do not share the contents of `secrets/PROD-SERVER.md` in issues, PRs,
-  chat, or any public surface.
+- **不要提交**以下任何内容到本仓库，包括临时试验：
+  SSH 私钥、含凭据的 `.env` 文件、API token、带口令的数据库 URL、
+  内部证书、**生产主机 / IP / 端口 / 用户**。
+- 生产元数据**唯一**允许的存放位置是 `secrets/PROD-SERVER.md`，
+  该文件被 `.gitignore` 忽略，只存在于本地 checkout。
+- CI 推荐使用 GitHub Actions Secrets。本地开发使用 `.env.local`
+  （Node 项目的 `.gitignore` 已忽略）。
+- 上面提到的 `PROD_DEPLOY_KEY` 仅为**命名引用**——不是值。实际的
+  密钥文件位于仓库之外。
 
 ---
 
-## 7. Pointers
+## 6. 代理不要做的事
 
-- See [`docs/deployment.md`](docs/deployment.md) for the deployment runbook
-  (once it is filled in).
-- See [`.github/renovate.md`](.github/renovate.md) for the dependency-update
-  policy.
-- See [`renovate.json`](renovate.json) for the Renovate configuration source.
-- See local-only [`secrets/PROD-SERVER.md`](secrets/PROD-SERVER.md) for the
-  authoritative production environment values (not in git).
+- 不要提交密钥（见第 5 节）。
+- 不要把生产主机 / IP / 端口 / 用户写进任何被追踪的文件，包括
+  `AGENTS.md` 自己。改用 `secrets/PROD-SERVER.md`。
+- 不要直接 push 到 `main`——始终走 PR（项目应有分支保护规则；
+  若还没有，请提交 issue 提出）。
+- 不要修改 `renovate.json` 把 major 升级改为 `automerge: true`。
+- 不要把 Renovate 配置扩展到 `mmw-devs` 的其它仓库——每个仓库
+  单独 opt-in。
+- 不要在本地 checkout 中执行 `npm publish` / `pnpm publish`。
+- 不要把 `secrets/PROD-SERVER.md` 的内容分享到工单、PR、聊天或
+  任何公开场合。
+
+---
+
+## 7. 相关文件
+
+- 部署手册：[`docs/deployment.md`](docs/deployment.md)
+- Renovate 说明：[`.github/renovate.md`](.github/renovate.md)
+- Renovate 配置：[`renovate.json`](renovate.json)
+- 生产环境值（不入 git）：[`secrets/PROD-SERVER.md`](secrets/PROD-SERVER.md)

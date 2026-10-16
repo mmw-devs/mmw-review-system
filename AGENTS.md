@@ -149,8 +149,9 @@ ssh ${PROD_USER}@${PROD_HOST} -p ${PROD_PORT}
   该文件被 `.gitignore` 忽略，只存在于本地 checkout。
 - CI 推荐使用 GitHub Actions Secrets。本地开发使用 `.env.local`
   （Node 项目的 `.gitignore` 已忽略）。
-- 上面提到的 `PROD_DEPLOY_KEY` 仅为**命名引用**——不是值。实际的
-  密钥文件位于仓库之外。
+- 上面提到的 `PROD_DEPLOY_KEY` 在 CI 端是 GitHub Actions Secret 名；
+  在本地对应 `secrets/PROD_DEPLOY_KEY` 这一文件（同被 `/secrets/`
+  忽略），由项目开发者持有且**默认就放在 `secrets/` 目录下**。
 
 ---
 

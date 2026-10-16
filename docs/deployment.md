@@ -54,7 +54,9 @@
 - 触发：push 到 `main`。
 - workflow 文件：`.github/workflows/deploy.yml`（**尚未创建 —— TODO**）。
 - 必需的 GitHub Actions Secrets：
-  - `PROD_DEPLOY_KEY` —— 用于 `${PROD_USER}@${PROD_HOST}:${PROD_PORT}` 的 SSH 密钥。
+  - `PROD_DEPLOY_KEY` —— 用于 `${PROD_USER}@${PROD_HOST}:${PROD_PORT}` 的 SSH 私钥内容
+    （由 `gh secret set PROD_DEPLOY_KEY < secrets/PROD_DEPLOY_KEY` 上传，
+    本地密钥文件**默认就放在 `secrets/` 目录下**，与 `PROD-SERVER.md` 同级）。
   - `PROD_HOST` —— 生产主机。
   - `PROD_USER` —— 生产 SSH 用户。
   - `PROD_PORT` —— 生产 SSH 端口。
@@ -65,7 +67,8 @@
 
 ```bash
 # 伪命令模板。${INSTALL_CMD}/${BUILD_CMD}/${RESTART_CMD} 待 §2、§3 决策后替换。
-# 生产值从 secrets/PROD-SERVER.md 加载，不要粘贴到这里。
+# 生产值从 secrets/PROD-SERVER.md 加载；私钥默认也放在 secrets/PROD_DEPLOY_KEY，
+# 不要把这些值粘贴到这里。
 # shellcheck disable=SC2154
 ssh -i "$PROD_DEPLOY_KEY" -p "$PROD_PORT" "$PROD_USER@$PROD_HOST" '
   set -euo pipefail

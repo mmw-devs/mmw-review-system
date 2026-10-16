@@ -1,17 +1,21 @@
 # Deployment runbook
 
 > Status: skeleton. This file is referenced from `AGENTS.md` §4 and §7.
-> Production is reachable at `106.54.44.57` (Tencent Cloud, Ubuntu,
-> SSH as `ubuntu@…:22`). The details of "how to deploy" are intentionally
-> left as TODOs for the project's developers to fill in.
+> The production host, port, user, and deploy key are **not** recorded in
+> this file. Those values live in local-only `secrets/PROD-SERVER.md`
+> (git-ignored; see `AGENTS.md` §4 and §5).
 
 ## 1. Environments
 
 | Name | Host | Access | Purpose |
 |------|------|--------|---------|
-| **production** | `106.54.44.57` (Tencent Cloud) | `ssh ubuntu@106.54.44.57 -p 22` | Live user-facing service |
+| **production** | `${PROD_HOST}` (cloud vendor `${CLOUD_VENDOR}`) | `ssh ${PROD_USER}@${PROD_HOST} -p ${PROD_PORT}` | Live user-facing service |
 | staging | _TODO_ | _TODO_ | Pre-prod soak |
 | local | developer laptop | — | Iterative development |
+
+> Resolve the placeholders from your local `secrets/PROD-SERVER.md`. If
+> that file is missing, request it from a project developer — do not
+> look up the values from public sources.
 
 ## 2. Process manager
 
@@ -41,17 +45,19 @@
 
 - Trigger: push to `main`.
 - Workflow file: `.github/workflows/deploy.yml` _(not yet present — TODO)_.
-- Required secrets:
-  - `PROD_DEPLOY_KEY` — SSH key for `ubuntu@106.54.44.57`.
-  - `PROD_HOST` — currently `106.54.44.57`.
-  - `PROD_USER` — currently `ubuntu`.
-  - `PROD_PORT` — currently `22`.
+- Required GitHub Actions secrets:
+  - `PROD_DEPLOY_KEY` — SSH key for `${PROD_USER}@${PROD_HOST}:${PROD_PORT}`.
+  - `PROD_HOST` — production host.
+  - `PROD_USER` — production SSH user.
+  - `PROD_PORT` — production SSH port.
 
 ## 5. Deploy steps (template)
 
 ```bash
 # Pseudo-template. Replace placeholders with the real values once §2 and §3
-# are decided.
+# are decided. Production values are loaded from
+# secrets/PROD-SERVER.md; do not paste them into this file.
+# shellcheck disable=SC2154
 ssh -i "$PROD_DEPLOY_KEY" -p "$PROD_PORT" "$PROD_USER@$PROD_HOST" '
   set -euo pipefail
   cd "${DEPLOY_DIR}"
@@ -71,7 +77,7 @@ _TODO — write at least one curl/grep probe that verifies the service is
 answering. Example:_
 
 ```bash
-curl -fsS https://<PUBLIC_HOST>/healthz | jq .
+curl -fsS "https://${PROD_HOST}/healthz" | jq .
 ```
 
 ## 7. Rollback
@@ -86,3 +92,6 @@ Maintain `docs/deployment-log.md` as an append-only ledger:
 | Timestamp (UTC) | Commit SHA | Operator | Result | Notes |
 |----------------|-----------|----------|--------|-------|
 ```
+
+> Do **not** paste `${PROD_HOST}` or any other production value into the
+> log entries — refer to them by their placeholder names.

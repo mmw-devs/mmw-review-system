@@ -147,3 +147,12 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# -----------------------------------------------------------------------------
+# mmw-review-system — project-specific ignores
+# -----------------------------------------------------------------------------
+
+# Local-only sensitive information (production endpoints, deploy-key names,
+# on-call notes). Tracked docs reference named placeholders only;
+# secrets/PROD-SERVER.md and any sibling files are intentionally NOT in git.
+/secrets/

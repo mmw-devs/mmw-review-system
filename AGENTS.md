@@ -47,42 +47,62 @@ _TODO: replace with the real layout once scaffolding lands._
 ├── docs/                 # Long-form documentation
 ├── .github/              # Workflows, templates, Renovate notes
 ├── AGENTS.md             # This file
-└── renovate.json         # Dependency-update policy (Renovate)
+├── renovate.json         # Dependency-update policy (Renovate)
+└── secrets/              # NOT in git. Local-only sensitive notes.
 ```
+
+> The `secrets/` directory is git-ignored. See §4 for what it should
+> contain and why.
 
 ---
 
-## 4. Production deployment
+## 4. Production deployment — sensitive information policy
 
-This section is for **deploying the application to the production server**.
-Read this section carefully before initiating any deployment action — the
-production environment is shared, sensitive, and serves real users.
+The production environment is shared, sensitive, and serves real users.
+This repository **does not store production endpoints, credentials, or
+key material in tracked files**. Instead, the project keeps a single
+local-only file:
 
-### 4.1 Production environment summary
+- **Path (in the working copy only)**: `secrets/PROD-SERVER.md`
+- **Git status**: ignored via `/secrets/` in `.gitignore`
+- **Authoritative values for**: `PROD_HOST`, `PROD_PORT`, `PROD_USER`,
+  `PROD_DEPLOY_KEY`, `CLOUD_VENDOR`
 
-| Property | Value |
-|----------|-------|
-| **Cloud vendor** | Tencent Cloud |
-| **Public address** | `106.54.44.57` |
-| **OS user** | `ubuntu` |
-| **SSH port** | `22` |
-| **Process manager** | _TODO: pick one — `pm2` or `systemd` (or both)_ |
-| **Deploy directory** | _TODO: pick one — e.g. `/opt/mmw-review-system`_ |
-| **Deploy key** | referenced as `PROD_DEPLOY_KEY` (no raw key in this file) |
-| **Source of truth** | `main` branch, deployed via CI on push |
+If `secrets/PROD-SERVER.md` is **not present** in your checkout:
 
-### 4.2 Authoritative connection string
+1. Ask another developer to share it out-of-band (encrypted message,
+   in-person handoff, password manager — **not** in chat, issues, or PRs).
+2. Do **not** attempt to discover the production host by cloning someone
+   else's machine or scraping public sources.
+3. Do **not** invent values. Deployments whose targets are unknown must
+   be blocked, not guessed.
+
+### 4.1 Production environment summary (variables only — values in secrets/)
+
+| Property | Placeholder | Defined in |
+|----------|-------------|------------|
+| **Cloud vendor** | `${CLOUD_VENDOR}` | `secrets/PROD-SERVER.md` |
+| **Public address** | `${PROD_HOST}` | `secrets/PROD-SERVER.md` |
+| **OS user** | `${PROD_USER}` | `secrets/PROD-SERVER.md` |
+| **SSH port** | `${PROD_PORT}` | `secrets/PROD-SERVER.md` |
+| **Process manager** | _TODO: pick one — `pm2` or `systemd` (or both)_ | this file, §4.1 |
+| **Deploy directory** | _TODO: pick one — e.g. `/opt/mmw-review-system`_ | this file, §4.1 |
+| **Deploy key** | `${PROD_DEPLOY_KEY}` (named reference only) | `secrets/PROD-SERVER.md` |
+| **Source of truth** | `main` branch, deployed via CI on push | this file, §4.1 |
+
+### 4.2 Authoritative connection string template
 
 ```text
-ssh ubuntu@106.54.44.57 -p 22
+ssh ${PROD_USER}@${PROD_HOST} -p ${PROD_PORT}
 ```
 
-- **The SSH private key is held by the project's developers, not in git.** The
-  first time you (or your agent) need to connect, ask the project's developers
-  for the location of the key file. Never paste key material into issues,
+- The SSH private key is **not** stored in this repository. The first time
+  you (or your agent) need to connect, ask the project's developers for
+  the location of the key file. Never paste key material into issues,
   PRs, comments, or chat transcripts.
-- If you do not already have access to `PROD_DEPLOY_KEY`, **stop and ask** —
-  do not invent an alternative path.
+- If you do not already have access to `PROD_DEPLOY_KEY` **and**
+  `secrets/PROD-SERVER.md`, **stop and ask** — do not invent an
+  alternative path.
 
 ### 4.3 Default deployment rules
 
@@ -101,6 +121,8 @@ ssh ubuntu@106.54.44.57 -p 22
 
 Before you tell CI to deploy, or before any manual SSH action:
 
+- [ ] `secrets/PROD-SERVER.md` exists in your local checkout and is the
+      current version shared by the team.
 - [ ] `main` is green on the required CI checks.
 - [ ] You can name the commit SHA being deployed.
 - [ ] Migrations, if any, have been rehearsed on staging.
@@ -114,8 +136,10 @@ Before you tell CI to deploy, or before any manual SSH action:
 
   ```bash
   # Pseudo-rollback. Replace `${PROCESS_MANAGER}` and `${DEPLOY_DIR}` with
-  # the values chosen once the deployment tooling lands.
-  ssh ubuntu@106.54.44.57 -p 22 \
+  # the values chosen once the deployment tooling lands. The host/port/user
+  # are loaded from secrets/PROD-SERVER.md; never hard-coded here.
+  # shellcheck disable=SC2154
+  ssh "${PROD_USER}@${PROD_HOST}" -p "${PROD_PORT}" \
     '${PROCESS_MANAGER} restart mmw-review-system \
        --cwd ${DEPLOY_DIR}'
   ```
@@ -126,7 +150,10 @@ Before you tell CI to deploy, or before any manual SSH action:
 
 - **Do not commit** any of the following to this repository in any form, even
   temporarily: SSH private keys, `.env` files containing credentials, API
-  tokens, database URLs with embedded passwords, internal certificates.
+  tokens, database URLs with embedded passwords, internal certificates,
+  **production host/IP/port/user**.
+- The single allowed home for production metadata is `secrets/PROD-SERVER.md`,
+  which is `.gitignore`d and lives only in local checkouts.
 - Use GitHub Actions secrets (preferred) for CI. Local development uses
   `.env.local` (already in `.gitignore` for Node projects).
 - The `PROD_DEPLOY_KEY` referenced above is a **named reference** — not a
@@ -137,6 +164,8 @@ Before you tell CI to deploy, or before any manual SSH action:
 ## 6. What an agent must NOT do
 
 - Do not commit secrets (see §5).
+- Do not write production host/IP/port/user into any tracked file — including
+  this one. Use `secrets/PROD-SERVER.md` instead.
 - Do not push to `main` directly — always via PR (branch-protection rules
   are expected to be turned on; if they are not, raise an issue).
 - Do not modify `renovate.json` in a way that would change automerge to
@@ -144,6 +173,8 @@ Before you tell CI to deploy, or before any manual SSH action:
 - Do not expand the Renovate config to other `mmw-devs` repositories
   without explicit owner approval — that rollout is opt-in per repo.
 - Do not run `npm publish` / `pnpm publish` from a local checkout.
+- Do not share the contents of `secrets/PROD-SERVER.md` in issues, PRs,
+  chat, or any public surface.
 
 ---
 
@@ -154,3 +185,5 @@ Before you tell CI to deploy, or before any manual SSH action:
 - See [`.github/renovate.md`](.github/renovate.md) for the dependency-update
   policy.
 - See [`renovate.json`](renovate.json) for the Renovate configuration source.
+- See local-only [`secrets/PROD-SERVER.md`](secrets/PROD-SERVER.md) for the
+  authoritative production environment values (not in git).

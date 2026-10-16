@@ -1,0 +1,112 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "default:automergeMinor",
+    "group:allNonMajor"
+  ],
+  "description": "Renovate config for mmw-review-system. Other mmw-devs repos are NOT enabled automatically; see .github/renovate.md.",
+  "repositoryCache": "enabled",
+  "gitAuthor": "Renovate Bot <bot@renovateapp.com>",
+  "commitBody": "Automated dependency upgrade via [Renovate](https://github.com/renovatebot/renovate).",
+  "prBodyNotes": [
+    "This repo is using Renovate to keep its dependencies up-to-date.",
+    "Per the project policy: minor/patch bumps are auto-merged; major bumps require manual review.",
+    "Cross-repo upgrades are NOT coordinated here. Other mmw-devs repos opt in individually."
+  ],
+  "schedule": [
+    "before 4am on monday"
+  ],
+  "timezone": "Asia/Shanghai",
+  "labels": [
+    "dependencies",
+    "renovate"
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 4am on monday"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Group all @types/* into a single PR",
+      "matchPackagePatterns": [
+        "^@types/"
+      ],
+      "groupName": "types"
+    },
+    {
+      "description": "Group ESLint ecosystem into a single PR",
+      "matchPackagePatterns": [
+        "^eslint",
+        "^@typescript-eslint/"
+      ],
+      "groupName": "eslint"
+    },
+    {
+      "description": "Group Prettier ecosystem into a single PR",
+      "matchPackagePatterns": [
+        "^prettier",
+        "eslint-config-prettier",
+        "eslint-plugin-prettier"
+      ],
+      "groupName": "prettier"
+    },
+    {
+      "description": "Group testing framework ecosystem",
+      "matchPackageNames": [
+        "vitest",
+        "@vitest/*",
+        "jest",
+        "ts-jest",
+        "@types/jest"
+      ],
+      "groupName": "test-framework"
+    },
+    {
+      "description": "Group build tooling ecosystem (TS, esbuild, swc, etc.)",
+      "matchPackagePatterns": [
+        "^typescript$",
+        "^ts-node$",
+        "^esbuild$",
+        "^swc"
+      ],
+      "groupName": "typescript-toolchain"
+    },
+    {
+      "description": "Major bumps: never auto-merge, require manual review",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "labels": [
+        "dependencies",
+        "renovate",
+        "breaking"
+      ],
+      "prBodyNotes": [
+        "⚠️ This is a major version bump. Please review migration notes before merging."
+      ]
+    },
+    {
+      "description": "Minor & patch upgrades: auto-merge",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
+      ],
+      "automerge": true,
+      "automergeType": "squash",
+      "platformAutomerge": true
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": [
+      "security",
+      "dependencies"
+    ]
+  }
+}

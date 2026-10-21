@@ -1,0 +1,594 @@
+{
+  "schema_version": "0.1.0",
+  "duty": {
+    "id": "demo-yosei",
+    "name": "妖星乱舞绝境战",
+    "title": "读取验证节选：战前准备表格与众神之像2时间轴",
+    "preparation": [
+      {
+        "type": "table",
+        "column_widths_px": [
+          402,
+          416
+        ],
+        "rows": [
+          {
+            "cells": [
+              {
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "项目",
+                        "style": {
+                          "color": "#ffffff",
+                          "font_size_px": 16,
+                          "bold": true
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "background_color": "#75b324"
+              },
+              {
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "详细",
+                        "style": {
+                          "color": "#ffffff",
+                          "font_size_px": 16,
+                          "bold": true
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "background_color": "#75b324"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "等级限制",
+                        "style": {
+                          "color": "#373c43",
+                          "font_size_px": 16
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "background_color": "#ffffff"
+              },
+              {
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "战斗精英/魔法导师 100级",
+                        "style": {
+                          "color": "#373c43",
+                          "font_size_px": 16
+                        }
+                      }
+                    ],
+                    "align": "left"
+                  }
+                ],
+                "background_color": "#ffffff"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "品级限制",
+                        "style": {
+                          "color": "#373c43",
+                          "font_size_px": 16
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "background_color": "#ffffff"
+              },
+              {
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "平均品级790～",
+                        "style": {
+                          "color": "#373c43",
+                          "font_size_px": 16
+                        }
+                      }
+                    ],
+                    "align": "left"
+                  }
+                ],
+                "background_color": "#ffffff"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "品级同步",
+                        "style": {
+                          "color": "#373c43",
+                          "font_size_px": 16
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "background_color": "#ffffff"
+              },
+              {
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "795",
+                        "style": {
+                          "color": "#373c43",
+                          "font_size_px": 16
+                        }
+                      }
+                    ],
+                    "align": "left"
+                  }
+                ],
+                "background_color": "#ffffff"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "参加人数",
+                        "style": {
+                          "color": "#373c43",
+                          "font_size_px": 16
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "background_color": "#ffffff"
+              },
+              {
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "8人",
+                        "style": {
+                          "color": "#373c43",
+                          "font_size_px": 16
+                        }
+                      }
+                    ],
+                    "align": "left"
+                  }
+                ],
+                "background_color": "#ffffff"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "时间限制",
+                        "style": {
+                          "color": "#373c43",
+                          "font_size_px": 16
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "background_color": "#ffffff"
+              },
+              {
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "120分钟",
+                        "style": {
+                          "color": "#373c43",
+                          "font_size_px": 16
+                        }
+                      }
+                    ],
+                    "align": "left"
+                  }
+                ],
+                "background_color": "#ffffff"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "phases": [
+    {
+      "id": "p1",
+      "title": "P1阶段",
+      "name": "P1",
+      "mechanics": [
+        {
+          "id": "statues-2",
+          "name": "众神之像2"
+        }
+      ]
+    }
+  ],
+  "phase_contents": [
+    {
+      "phase_id": "p1",
+      "sections": [
+        {
+          "id": "statues-2",
+          "type": "separator",
+          "title": "众神之像2"
+        },
+        {
+          "id": "statues-2-timeline",
+          "type": "content",
+          "title": "机制时间轴",
+          "content": [
+            {
+              "type": "list",
+              "ordered": true,
+              "items": [
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "众神之像",
+                        "style": {
+                          "bold": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "第二次众神之像读条"
+                      },
+                      {
+                        "type": "hard_break"
+                      },
+                      {
+                        "type": "text",
+                        "text": "机制开始"
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "神像连线出现",
+                        "style": {
+                          "bold": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "左连线为重力弹（先分摊）"
+                      },
+                      {
+                        "type": "hard_break"
+                      },
+                      {
+                        "type": "text",
+                        "text": "右连线为岩石弹（后单吃）"
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "扩大大冰封",
+                        "style": {
+                          "bold": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "真假魔法 本次固定为冰"
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "冰扇形 + 重力弹判定 + 岩石弹判定",
+                        "style": {
+                          "bold": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "岩石弹判定会略晚几秒"
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "恶狠狠毁荡",
+                        "style": {
+                          "bold": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "对一仇、二仇的二连死刑"
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "神像半场刀 + 连线出现",
+                        "style": {
+                          "bold": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "神像的半场刀会在第二下死刑判定时判定"
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "重力弹判定 + 岩石弹判定",
+                        "style": {
+                          "bold": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "本次会在半场刀判定后判定 需快速前往目标位置"
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "神像半场刀",
+                        "style": {
+                          "bold": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "会在岩石弹判定后判定 需快速前往安全半场"
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "第二次传毒",
+                        "style": {
+                          "bold": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "TH/DPS组内传毒"
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "重力弹发光",
+                        "style": {
+                          "bold": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "可通过分摊踩入"
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "制裁之光",
+                        "style": {
+                          "bold": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "全屏AOE 运动会结束"
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "超驱动*3",
+                        "style": {
+                          "bold": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "瞬发对T死刑 无读条"
+                      }
+                    ]
+                  }
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1003 @@
+{
+  "_example": {
+    "description": "字段讨论示例：包含所有建议字段及正文块类型。guide为攻略产物；review为独立审核记录，此处放在同一文件方便阅读。",
+    "content_basis": "恩欧歼殛战 P1·无之膨胀节选；时间轴表格、宏、提示及样式演示为补充示例。",
+    "not_production_data": true,
+    "limitations": [
+      "除原文链接和节选内容外，ID、时间、审核身份、资源引用均为演示值。",
+      "资源文件未下载，raw_ref指向的文件未生成；空值表示未知或不适用。",
+      "正文节点的source_block_ids为演示标识，不是实际飞书块ID。",
+      "outline节点只引用自身内容；完整业务章节范围需递归合并子节点引用，并按正文顺序读取。",
+      "内部审核信息不应直接进入对外发布文件。"
+    ]
+  },
+  "guide": {
+    "schema_version": "0.1.0-draft",
+    "guide_id": "demo-guide-enou",
+    "metadata": {
+      "title": "【字段示例】恩欧歼殛战·P1·无之膨胀",
+      "encounter_name": "恩欧歼殛战",
+      "encounter_type": "extreme",
+      "subtitle": "黑洞基准解法节选",
+      "team_name": "MMW攻略组",
+      "cover_asset_id": null,
+      "language": "zh-CN"
+    },
+    "source": {
+      "provider": "feishu",
+      "url": "https://mmw-ffxiv.feishu.cn/wiki/ILFIward8isSn3kTjjJcZgLnn8f",
+      "wiki_node_token": "ILFIward8isSn3kTjjJcZgLnn8f",
+      "document_id": "demo-document-enou",
+      "revision_id": null,
+      "snapshot_id": "demo-snapshot-001",
+      "fetched_at": "2026-10-16T10:00:00+08:00",
+      "content_hash": null
+    },
+    "document": {
+      "children": [
+        {
+          "id": "b-intro-title",
+          "type": "heading",
+          "source_block_ids": [
+            "demo-source-b-intro-title"
+          ],
+          "attrs": {
+            "level": 1
+          },
+          "runs": [
+            {
+              "text": "攻略须知"
+            }
+          ]
+        },
+        {
+          "id": "b-intro",
+          "type": "paragraph",
+          "source_block_ids": [
+            "demo-source-b-intro"
+          ],
+          "runs": [
+            {
+              "text": "本示例节选恩欧 P1·无之膨胀。其余内容用于演示字段，不是可直接发布的完整攻略。"
+            }
+          ]
+        },
+        {
+          "id": "b-update-title",
+          "type": "heading",
+          "source_block_ids": [
+            "demo-source-b-update-title"
+          ],
+          "attrs": {
+            "level": 2
+          },
+          "runs": [
+            {
+              "text": "更新记录"
+            }
+          ]
+        },
+        {
+          "id": "b-update",
+          "type": "paragraph",
+          "source_block_ids": [
+            "demo-source-b-update"
+          ],
+          "runs": [
+            {
+              "text": "示例更新：补充黑洞基准解法。"
+            }
+          ]
+        },
+        {
+          "id": "b-preparation-title",
+          "type": "heading",
+          "source_block_ids": [
+            "demo-source-b-preparation-title"
+          ],
+          "attrs": {
+            "level": 1
+          },
+          "runs": [
+            {
+              "text": "战前准备"
+            }
+          ]
+        },
+        {
+          "id": "b-preparation",
+          "type": "paragraph",
+          "source_block_ids": [
+            "demo-source-b-preparation"
+          ],
+          "runs": [
+            {
+              "text": "本示例采用 MT 组、ST 组进行分组。"
+            }
+          ]
+        },
+        {
+          "id": "b-phase-title",
+          "type": "heading",
+          "source_block_ids": [
+            "demo-source-b-phase-title"
+          ],
+          "attrs": {
+            "level": 2
+          },
+          "runs": [
+            {
+              "text": "P1阶段"
+            }
+          ]
+        },
+        {
+          "id": "b-mechanic-title",
+          "type": "heading",
+          "source_block_ids": [
+            "demo-source-b-mechanic-title"
+          ],
+          "attrs": {
+            "level": 3
+          },
+          "runs": [
+            {
+              "text": "P1·无之膨胀（连线球 + 黑球分摊）"
+            }
+          ]
+        },
+        {
+          "id": "b-description",
+          "type": "paragraph",
+          "source_block_ids": [
+            "demo-source-b-description"
+          ],
+          "runs": [
+            {
+              "text": "BOSS连线场外大黑洞并激活。黑洞释放钢铁或月环AOE；同时点名1或2名奶妈连线小黑球，需要T挡枪并由人群分摊。"
+            }
+          ]
+        },
+        {
+          "id": "b-solution-title",
+          "type": "heading",
+          "source_block_ids": [
+            "demo-source-b-solution-title"
+          ],
+          "attrs": {
+            "level": 7
+          },
+          "runs": [
+            {
+              "text": "解法1（黑洞基准）"
+            }
+          ]
+        },
+        {
+          "id": "b-solution",
+          "type": "columns",
+          "source_block_ids": [
+            "demo-source-b-solution"
+          ],
+          "attrs": {
+            "gap_px": 16
+          },
+          "children": [
+            {
+              "id": "b-left",
+              "type": "column",
+              "source_block_ids": [
+                "demo-source-b-left"
+              ],
+              "attrs": {
+                "width_ratio": 0.6
+              },
+              "children": [
+                {
+                  "id": "b-orientation",
+                  "type": "paragraph",
+                  "source_block_ids": [
+                    "demo-source-b-orientation"
+                  ],
+                  "runs": [
+                    {
+                      "text": "以BOSS指向的场外黑洞为12点。"
+                    }
+                  ]
+                },
+                {
+                  "id": "b-steps",
+                  "type": "list",
+                  "source_block_ids": [
+                    "demo-source-b-steps"
+                  ],
+                  "attrs": {
+                    "ordered": true,
+                    "start": 1
+                  },
+                  "children": [
+                    {
+                      "id": "b-step1",
+                      "type": "list_item",
+                      "source_block_ids": [
+                        "demo-source-b-step1"
+                      ],
+                      "children": [
+                        {
+                          "id": "b-step1-text",
+                          "type": "paragraph",
+                          "source_block_ids": [
+                            "demo-source-b-step1-text"
+                          ],
+                          "runs": [
+                            {
+                              "text": "双球：MT组左，ST组右，T在人群后面挡枪，人群靠近BOSS。"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "id": "b-step2",
+                      "type": "list_item",
+                      "source_block_ids": [
+                        "demo-source-b-step2"
+                      ],
+                      "children": [
+                        {
+                          "id": "b-step2-text",
+                          "type": "paragraph",
+                          "source_block_ids": [
+                            "demo-source-b-step2-text"
+                          ],
+                          "runs": [
+                            {
+                              "text": "单球：全员集合，双T在人群后面挡枪。"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "id": "b-step3",
+                      "type": "list_item",
+                      "source_block_ids": [
+                        "demo-source-b-step3"
+                      ],
+                      "children": [
+                        {
+                          "id": "b-step3-text",
+                          "type": "paragraph",
+                          "source_block_ids": [
+                            "demo-source-b-step3-text"
+                          ],
+                          "runs": [
+                            {
+                              "text": "钢铁远离黑洞；月环靠近黑洞。"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "b-right",
+              "type": "column",
+              "source_block_ids": [
+                "demo-source-b-right"
+              ],
+              "attrs": {
+                "width_ratio": 0.4
+              },
+              "children": [
+                {
+                  "id": "b-image",
+                  "type": "image",
+                  "source_block_ids": [
+                    "demo-source-b-image"
+                  ],
+                  "attrs": {
+                    "asset_id": "asset-image",
+                    "width": 1280,
+                    "height": 720,
+                    "caption": "演示图片位置，未提供实际图片文件",
+                    "align": "center"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "b-role-note",
+          "type": "callout",
+          "source_block_ids": [
+            "demo-source-b-role-note"
+          ],
+          "attrs": {
+            "emoji": "🛡️",
+            "background_color": "#f0f4ff",
+            "border_color": "#bacefd"
+          },
+          "children": [
+            {
+              "id": "b-role-label",
+              "type": "paragraph",
+              "source_block_ids": [
+                "demo-source-b-role-label"
+              ],
+              "runs": [
+                {
+                  "text": "防护职能注意",
+                  "marks": {
+                    "bold": true,
+                    "text_color": "#245bdb"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "b-role-text",
+              "type": "paragraph",
+              "source_block_ids": [
+                "demo-source-b-role-text"
+              ],
+              "runs": [
+                {
+                  "text": "站位顺序：黑球 → T → 人群 → BOSS。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "b-note",
+          "type": "callout",
+          "source_block_ids": [
+            "demo-source-b-note"
+          ],
+          "attrs": {
+            "emoji": "⚠️",
+            "background_color": "#fff5eb",
+            "border_color": "#fed4a4"
+          },
+          "children": [
+            {
+              "id": "b-note-text",
+              "type": "paragraph",
+              "source_block_ids": [
+                "demo-source-b-note-text"
+              ],
+              "runs": [
+                {
+                  "text": "这是演示提醒：具体站位请结合对应解法配图确认。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "b-style-demo",
+          "type": "paragraph",
+          "source_block_ids": [
+            "demo-source-b-style-demo"
+          ],
+          "attrs": {
+            "align": "left",
+            "indent": 0
+          },
+          "runs": [
+            {
+              "text": "样式演示：",
+              "marks": {
+                "bold": true
+              }
+            },
+            {
+              "text": "斜体 ",
+              "marks": {
+                "italic": true
+              }
+            },
+            {
+              "text": "下划线 ",
+              "marks": {
+                "underline": true
+              }
+            },
+            {
+              "text": "废弃文字 ",
+              "marks": {
+                "strike": true
+              }
+            },
+            {
+              "text": "彩色强调 ",
+              "marks": {
+                "text_color": "#d83931",
+                "background_color": "#fff5eb",
+                "font_size_px": 20
+              }
+            },
+            {
+              "text": "原文链接",
+              "marks": {
+                "link": {
+                  "href": "https://mmw-ffxiv.feishu.cn/wiki/ILFIward8isSn3kTjjJcZgLnn8f"
+                }
+              }
+            },
+            {
+              "type": "hard_break"
+            },
+            {
+              "text": "这里是换行后的文字。"
+            }
+          ]
+        },
+        {
+          "id": "b-timeline-title",
+          "type": "heading",
+          "source_block_ids": [
+            "demo-source-b-timeline-title"
+          ],
+          "attrs": {
+            "level": 3
+          },
+          "runs": [
+            {
+              "text": "机制时间轴（演示）"
+            }
+          ]
+        },
+        {
+          "id": "b-table",
+          "type": "table",
+          "source_block_ids": [
+            "demo-source-b-table"
+          ],
+          "attrs": {
+            "column_widths": [
+              160,
+              400
+            ]
+          },
+          "children": [
+            {
+              "id": "b-row1",
+              "type": "table_row",
+              "source_block_ids": [
+                "demo-source-b-row1"
+              ],
+              "children": [
+                {
+                  "id": "b-cell1",
+                  "type": "table_cell",
+                  "source_block_ids": [
+                    "demo-source-b-cell1"
+                  ],
+                  "attrs": {
+                    "row_span": 1,
+                    "col_span": 1,
+                    "header": true
+                  },
+                  "children": [
+                    {
+                      "id": "b-cell1-text",
+                      "type": "paragraph",
+                      "source_block_ids": [
+                        "demo-source-b-cell1-text"
+                      ],
+                      "runs": [
+                        {
+                          "text": "顺序"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "b-cell2",
+                  "type": "table_cell",
+                  "source_block_ids": [
+                    "demo-source-b-cell2"
+                  ],
+                  "attrs": {
+                    "row_span": 1,
+                    "col_span": 1,
+                    "header": true
+                  },
+                  "children": [
+                    {
+                      "id": "b-cell2-text",
+                      "type": "paragraph",
+                      "source_block_ids": [
+                        "demo-source-b-cell2-text"
+                      ],
+                      "runs": [
+                        {
+                          "text": "内容"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "b-row2",
+              "type": "table_row",
+              "source_block_ids": [
+                "demo-source-b-row2"
+              ],
+              "children": [
+                {
+                  "id": "b-cell3",
+                  "type": "table_cell",
+                  "source_block_ids": [
+                    "demo-source-b-cell3"
+                  ],
+                  "attrs": {
+                    "row_span": 1,
+                    "col_span": 1,
+                    "header": false
+                  },
+                  "children": [
+                    {
+                      "id": "b-cell3-text",
+                      "type": "paragraph",
+                      "source_block_ids": [
+                        "demo-source-b-cell3-text"
+                      ],
+                      "runs": [
+                        {
+                          "text": "第一步"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "b-cell4",
+                  "type": "table_cell",
+                  "source_block_ids": [
+                    "demo-source-b-cell4"
+                  ],
+                  "attrs": {
+                    "row_span": 1,
+                    "col_span": 1,
+                    "header": false
+                  },
+                  "children": [
+                    {
+                      "id": "b-cell4-text",
+                      "type": "paragraph",
+                      "source_block_ids": [
+                        "demo-source-b-cell4-text"
+                      ],
+                      "runs": [
+                        {
+                          "text": "观察黑洞连线，判断钢铁或月环。"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "b-quote",
+          "type": "quote",
+          "source_block_ids": [
+            "demo-source-b-quote"
+          ],
+          "children": [
+            {
+              "id": "b-quote-text",
+              "type": "paragraph",
+              "source_block_ids": [
+                "demo-source-b-quote-text"
+              ],
+              "runs": [
+                {
+                  "text": "演示引用：本示例不代表该解法已经在审核系统中通过审核。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "b-macro",
+          "type": "code_block",
+          "source_block_ids": [
+            "demo-source-b-macro"
+          ],
+          "attrs": {
+            "language": "plain_text",
+            "code": "/p 【演示宏】双球：MT组左，ST组右\n/p T挡枪，人群靠近BOSS",
+            "wrap": true
+          }
+        },
+        {
+          "id": "b-board",
+          "type": "code_block",
+          "source_block_ids": [
+            "demo-source-b-board"
+          ],
+          "attrs": {
+            "language": "plain_text",
+            "code": "[stgy:DEMO_ONLY_NOT_A_VALID_CODE]",
+            "wrap": true
+          }
+        },
+        {
+          "id": "b-reference",
+          "type": "paragraph",
+          "source_block_ids": [
+            "demo-source-b-reference"
+          ],
+          "runs": [
+            {
+              "text": "攻略原文",
+              "marks": {
+                "link": {
+                  "href": "https://mmw-ffxiv.feishu.cn/wiki/ILFIward8isSn3kTjjJcZgLnn8f"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "b-video",
+          "type": "media",
+          "source_block_ids": [
+            "demo-source-b-video"
+          ],
+          "attrs": {
+            "asset_id": "asset-video",
+            "caption": "演示视频引用，未提供真实视频",
+            "controls": true
+          }
+        },
+        {
+          "id": "b-attachment",
+          "type": "media",
+          "source_block_ids": [
+            "demo-source-b-attachment"
+          ],
+          "attrs": {
+            "asset_id": "asset-attachment",
+            "caption": "演示附件引用"
+          }
+        },
+        {
+          "id": "b-divider",
+          "type": "divider",
+          "source_block_ids": [
+            "demo-source-b-divider"
+          ]
+        },
+        {
+          "id": "b-embed",
+          "type": "embed",
+          "source_block_ids": [
+            "demo-source-b-embed"
+          ],
+          "attrs": {
+            "provider": "feishu",
+            "embed_type": "sheet",
+            "source_ref": "demo-sheet-reference",
+            "load_status": "not_expanded",
+            "fallback_text": "此处为嵌入表格，尚未读取内部内容。"
+          }
+        },
+        {
+          "id": "b-unsupported",
+          "type": "unsupported",
+          "source_block_ids": [
+            "demo-source-b-unsupported"
+          ],
+          "attrs": {
+            "original_type": "isv",
+            "raw_ref": "raw/unsupported-block-demo.json",
+            "fallback_text": "此处为第三方组件，当前转换器不支持。"
+          }
+        }
+      ]
+    },
+    "outline": [
+      {
+        "id": "o-intro",
+        "parent_id": null,
+        "kind": "introduction",
+        "title": "攻略须知",
+        "label": null,
+        "body_block_ids": [
+          "b-intro-title",
+          "b-intro"
+        ],
+        "mapping_status": "inferred",
+        "attributes": {}
+      },
+      {
+        "id": "o-update",
+        "parent_id": null,
+        "kind": "changelog",
+        "title": "更新记录",
+        "label": null,
+        "body_block_ids": [
+          "b-update-title",
+          "b-update"
+        ],
+        "mapping_status": "inferred",
+        "attributes": {}
+      },
+      {
+        "id": "o-preparation",
+        "parent_id": null,
+        "kind": "preparation",
+        "title": "战前准备",
+        "label": null,
+        "body_block_ids": [
+          "b-preparation-title",
+          "b-preparation"
+        ],
+        "mapping_status": "inferred",
+        "attributes": {}
+      },
+      {
+        "id": "o-phase",
+        "parent_id": null,
+        "kind": "phase",
+        "title": "P1阶段",
+        "label": "P1",
+        "body_block_ids": [
+          "b-phase-title"
+        ],
+        "mapping_status": "inferred",
+        "attributes": {}
+      },
+      {
+        "id": "o-mechanic",
+        "parent_id": "o-phase",
+        "kind": "mechanic",
+        "title": "无之膨胀",
+        "label": null,
+        "body_block_ids": [
+          "b-mechanic-title"
+        ],
+        "mapping_status": "inferred",
+        "attributes": {}
+      },
+      {
+        "id": "o-description",
+        "parent_id": "o-mechanic",
+        "kind": "explanation",
+        "title": "机制说明",
+        "label": null,
+        "body_block_ids": [
+          "b-description"
+        ],
+        "mapping_status": "inferred",
+        "attributes": {}
+      },
+      {
+        "id": "o-solution",
+        "parent_id": "o-mechanic",
+        "kind": "solution",
+        "title": "解法1（黑洞基准）",
+        "label": null,
+        "body_block_ids": [
+          "b-solution-title",
+          "b-solution"
+        ],
+        "mapping_status": "inferred",
+        "attributes": {
+          "author_label": null,
+          "validation_status": "unknown",
+          "priority_text": "双球时MT组左、ST组右",
+          "orientation_text": "以BOSS指向的场外黑洞为12点"
+        }
+      },
+      {
+        "id": "o-role",
+        "parent_id": "o-solution",
+        "kind": "role_note",
+        "title": "防护职能注意",
+        "label": null,
+        "body_block_ids": [
+          "b-role-note"
+        ],
+        "mapping_status": "inferred",
+        "attributes": {
+          "roles": [
+            "tank"
+          ]
+        }
+      },
+      {
+        "id": "o-note",
+        "parent_id": "o-solution",
+        "kind": "note",
+        "title": "注意事项",
+        "label": null,
+        "body_block_ids": [
+          "b-note"
+        ],
+        "mapping_status": "inferred",
+        "attributes": {}
+      },
+      {
+        "id": "o-timeline",
+        "parent_id": "o-mechanic",
+        "kind": "timeline",
+        "title": "机制时间轴（演示）",
+        "label": null,
+        "body_block_ids": [
+          "b-timeline-title",
+          "b-table"
+        ],
+        "mapping_status": "inferred",
+        "attributes": {}
+      },
+      {
+        "id": "o-macro",
+        "parent_id": "o-solution",
+        "kind": "macro",
+        "title": "分组提示宏（演示）",
+        "label": null,
+        "body_block_ids": [
+          "b-macro"
+        ],
+        "mapping_status": "inferred",
+        "attributes": {}
+      },
+      {
+        "id": "o-board",
+        "parent_id": "o-solution",
+        "kind": "strategy_board",
+        "title": "战术板（演示）",
+        "label": null,
+        "body_block_ids": [
+          "b-board"
+        ],
+        "mapping_status": "inferred",
+        "attributes": {}
+      },
+      {
+        "id": "o-reference",
+        "parent_id": null,
+        "kind": "reference",
+        "title": "参考资料",
+        "label": null,
+        "body_block_ids": [
+          "b-reference",
+          "b-video",
+          "b-attachment"
+        ],
+        "mapping_status": "inferred",
+        "attributes": {}
+      },
+      {
+        "id": "o-unclassified",
+        "parent_id": null,
+        "kind": "unclassified",
+        "title": "样式与未展开内容演示",
+        "label": null,
+        "body_block_ids": [
+          "b-style-demo",
+          "b-quote",
+          "b-divider",
+          "b-embed",
+          "b-unsupported"
+        ],
+        "mapping_status": "unresolved",
+        "attributes": {}
+      }
+    ],
+    "assets": [
+      {
+        "id": "asset-image",
+        "kind": "image",
+        "source_ref": "demo-image-reference",
+        "local_path": null,
+        "mime_type": "image/png",
+        "size_bytes": null,
+        "sha256": null,
+        "fetch_status": "failed",
+        "alt_text": "演示图片占位，未检查图片内容",
+        "alt_origin": "example"
+      },
+      {
+        "id": "asset-video",
+        "kind": "video",
+        "source_ref": "https://example.com/demo-video.mp4",
+        "local_path": null,
+        "mime_type": "video/mp4",
+        "size_bytes": null,
+        "sha256": null,
+        "fetch_status": "external_only",
+        "alt_text": null,
+        "alt_origin": null
+      },
+      {
+        "id": "asset-attachment",
+        "kind": "attachment",
+        "source_ref": "demo-attachment-reference",
+        "local_path": null,
+        "mime_type": "application/pdf",
+        "size_bytes": null,
+        "sha256": null,
+        "fetch_status": "pending",
+        "alt_text": null,
+        "alt_origin": null
+      }
+    ],
+    "conversion": {
+      "converter_version": "demo-0.1.0",
+      "generated_at": "2026-10-16T10:10:00+08:00",
+      "status": "partial",
+      "issues": [
+        {
+          "code": "ASSET_FETCH_FAILED",
+          "severity": "error",
+          "source_block_ids": [
+            "demo-source-b-image"
+          ],
+          "message": "示例图片未下载，不能作为完整离线产物。"
+        },
+        {
+          "code": "EMBED_NOT_EXPANDED",
+          "severity": "warning",
+          "source_block_ids": [
+            "demo-source-b-embed"
+          ],
+          "message": "嵌入电子表格仅保留引用，未获取其内部数据。"
+        },
+        {
+          "code": "UNSUPPORTED_BLOCK",
+          "severity": "warning",
+          "source_block_ids": [
+            "demo-source-b-unsupported"
+          ],
+          "message": "第三方组件仅演示占位字段。"
+        },
+        {
+          "code": "SEMANTIC_MAPPING_UNCONFIRMED",
+          "severity": "info",
+          "source_block_ids": [
+            "demo-source-b-phase-title",
+            "demo-source-b-mechanic-title"
+          ],
+          "message": "业务归类仅供演示，尚未经人工确认。"
+        }
+      ]
+    }
+  },
+  "review": {
+    "review_id": "demo-review-001",
+    "guide_id": "demo-guide-enou",
+    "snapshot_id": "demo-snapshot-001",
+    "scope": {
+      "type": "full_document"
+    },
+    "requested_by": {
+      "user_id": "demo-user-001",
+      "display_name": "演示发起人"
+    },
+    "requested_at": "2026-10-16T10:01:00+08:00",
+    "status": "approved",
+    "reviewed_by": {
+      "user_id": "demo-user-002",
+      "display_name": "演示审核人"
+    },
+    "reviewed_at": "2026-10-16T10:05:00+08:00",
+    "comment": "模拟审核通过，仅用于解释字段；转换缺图等问题仍需单独处理。",
+    "artifact_id": null
+  }
+}

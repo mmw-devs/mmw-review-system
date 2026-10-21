@@ -1,0 +1,92 @@
+{
+  "schema_version": "0.1.0",
+  "duty": {
+    "id": "demo-enou",
+    "name": "恩欧歼殛战",
+    "title": "恩欧歼殛战：无之膨胀（节选示例）"
+  },
+  "phases": [
+    {
+      "id": "p1",
+      "title": "P1阶段",
+      "name": "P1",
+      "mechanics": [
+        {
+          "id": "void-expansion",
+          "name": "无之膨胀"
+        }
+      ]
+    }
+  ],
+  "phase_contents": [
+    {
+      "phase_id": "p1",
+      "sections": [
+        {
+          "id": "void-expansion",
+          "type": "separator",
+          "title": "无之膨胀（连线球 + 黑球分摊）"
+        },
+        {
+          "id": "void-expansion-mechanic",
+          "type": "mechanic",
+          "title": "机制说明",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "BOSS连线场外大黑洞并激活。黑洞释放钢铁或月环AOE，同时小黑球点名奶妈连线，需要T挡枪、人群分摊。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "void-expansion-solution",
+          "type": "solution",
+          "title": "黑洞基准",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "以BOSS指向的场外黑洞为12点。双球时MT组左、ST组右；单球时全员集合。T在人群后面挡枪，人群靠近BOSS。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "void-expansion-note",
+          "type": "note",
+          "title": "防护职能注意",
+          "roles": [
+            "tank"
+          ],
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "站位顺序：",
+                  "style": {
+                    "bold": true,
+                    "color": "#245bdb"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "黑球 → T → 人群 → BOSS。"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

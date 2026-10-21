@@ -12,8 +12,10 @@
 
 ## 1. 项目概览
 
-- **项目目的** —— _TODO：用一段话说明 mmw-review-system 是什么、
-  服务于哪些用户、成功标准是什么。_
+- **项目目的** —— 为 MMW 攻略组内部人员提供飞书攻略审核与转换能力。
+  当前已实现命令行读取、转换、校验和本地保存；完整审核平台仍在设计中。
+  转换成功要求输出满足契约，且排除内容已经明确确认，不代表攻略已获人工审核通过。
+  项目入口见 [README](README.md)，实际运行边界见[命令行说明](docs/converter-cli.md)。
 - **主语言** —— TypeScript。
 - **仓库约定**：
   - 代码由配置的格式化器格式化（`TODO：prettier`）。
@@ -21,44 +23,61 @@
   - 提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh)：
     `feat:`、`fix:`、`chore:`、`docs:` 等。
 
+> 上述 Lint 是仓库目标要求。当前尚未配置 Lint 命令和对应 CI，
+> 不应把未配置或未运行的检查报告为通过。其余未完成事项继续保留 `TODO`。
+
 ---
 
 ## 2. 代理快速参考
 
 | 项目 | 命令 |
 |------|------|
-| 安装依赖 | `TODO：npm ci / pnpm install / yarn install` |
-| 类型检查 | `TODO：tsc --noEmit` |
-| 运行单元测试 | `TODO：npm test` |
-| 运行 Lint | `TODO：npm run lint` |
-| 构建生产产物 | `TODO：npm run build` |
-| 本地开发服务器 | `TODO：npm run dev` |
+| 运行环境 | Node.js 24 或以上；获取真实文档另需已安装、登录的飞书 CLI |
+| 安装依赖 | 当前无第三方运行依赖，无需安装；TODO：引入依赖后确定锁文件和安装命令 |
+| 显示转换器帮助 | `node src/cli.ts --help` |
+| 类型检查 | TODO：尚未配置，直接运行 TypeScript 不等于类型检查 |
+| 运行测试 | `node tests/converter.test.ts` 或 `npm test`；包括模拟 CLI 集成测试 |
+| 运行 Lint | TODO：尚未配置 `lint` 脚本 |
+| 构建生产产物 | 当前直接运行 TypeScript；TODO：服务端构建流程 |
+| 本地开发服务器 | TODO：尚无 Web 服务或 `dev` 脚本 |
 
 > **性能建议（针对代理）**：在同一会话中不要反复执行 `npm install`
 > （或等价命令）。请复用上一步已经准备好的 `node_modules/` 缓存。
+
+真实拉取与下载会访问飞书并产生本地快照，不能当作普通离线单元测试执行。
+不要替操作者确认真实内容的丢弃。运行环境混用 Windows 和 WSL 时，路径示例见
+[命令行说明](docs/converter-cli.md#1-运行条件与输入)。
 
 ---
 
 ## 3. 目录结构
 
-_TODO：脚手架落地后用真实结构替换。_
+当前结构如下；TODO：审核服务和页面落地后补充相应目录。
 
 ```text
 .
-├── src/                  # 应用程序源码
-├── tests/                # 测试代码
-├── docs/                 # 长篇文档（部署手册等）
-├── .github/              # Workflow、PR/Issue 模板、Renovate 说明
+├── src/                  # CLI、飞书读取、正文转换和校验
+├── tests/                # 转换及模拟 CLI 测试
+├── schemas/              # 攻略 JSON Schema
+├── docs/                 # 使用说明、设计、示例和历史调查
+├── .github/              # 当前为 Renovate 说明；部署 workflow 尚未实现
+├── data/                 # 不入 git，本地任务快照、报告和产物
+├── README.md             # 项目介绍及文档入口
+├── package.json          # convert、test 命令；无第三方运行依赖
 ├── AGENTS.md             # 当前文件
 ├── renovate.json         # 依赖更新策略（Renovate）
 └── secrets/              # 不入 git，仅本地保存的敏感说明
 ```
 
 > `secrets/` 目录被 `.gitignore` 忽略，详见第 4 节。
+> `data/` 按需生成且被忽略。不要提交原始快照、内部记录或下载的攻略资源。
 
 ---
 
 ## 4. 生产部署 —— 敏感信息策略
+
+本节规定未来生产部署必须遵守的边界，不表示当前已部署审核服务。
+部署 workflow 尚未创建，本地命令行运行无需读取生产连接信息。
 
 生产环境多人共享、敏感、面向真实用户。本仓库**不在被 git 追踪的
 文件中存放生产端点、凭据或密钥**。取而代之，项目仅在以下位置保留

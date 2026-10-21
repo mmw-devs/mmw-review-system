@@ -156,3 +156,8 @@ vite.config.ts.timestamp-*
 # on-call notes). Tracked docs reference named placeholders only;
 # secrets/PROD-SERVER.md and any sibling files are intentionally NOT in git.
 /secrets/
+
+# Local conversion snapshots and output
+/data/
+/backups/
+/tmp/

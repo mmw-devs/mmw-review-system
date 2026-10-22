@@ -80,6 +80,7 @@ Schema 校验通过，表示字段和已检查的关联符合契约，不保证�
 | --- | --- |
 | 运行转换、处理错误、理解输出文件 | [命令行使用说明](docs/converter-cli.md) |
 | 平台最终服务谁、审核怎样进行、字段有什么含义 | [平台与字段设计](docs/strategy-review-platform.md) |
+| 后续如何免 CLI 读取、在 H5 授权并控制审核权限 | [API 读取与基础权限方案（未实现）](docs/feishu-api-and-permissions.md) |
 | JSON 节点、必填字段和关联约束 | [JSON 结构](docs/strategy-json-format.md)、[JSON Schema](schemas/strategy.schema.json) |
 | 飞书攻略怎样写、旧文档怎样兼容 | [撰写规范与转换规则](docs/feishu-authoring-and-conversion.md) |
 | 查看简短或全字段示例 | [示例说明](docs/examples/README.md) |

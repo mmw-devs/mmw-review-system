@@ -1,0 +1,10 @@
+{
+  "name": "mmw-review-system",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "convert": "node src/cli.ts",
+    "test": "node tests/converter.test.ts"
+  }
+}

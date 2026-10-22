@@ -1,0 +1,454 @@
+{
+  "schema_version": "0.1.0",
+  "duty": {
+    "id": "demo-enou",
+    "name": "恩欧歼殛战",
+    "title": "全部字段演示：恩欧节选与模拟内容",
+    "short": "恩欧",
+    "type": "demo-category",
+    "description": "用于讨论结构，演示资源并未下载，非正式攻略。",
+    "banner": "assets/demo-cover.png",
+    "videoLink": "https://example.com/demo-video",
+    "introduction": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "演示攻略须知：以下仅为字段示例。"
+          }
+        ]
+      }
+    ],
+    "preparation": [
+      {
+        "type": "heading",
+        "level": 2,
+        "content": [
+          {
+            "type": "text",
+            "text": "演示战前准备"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "此处保存开放条件、标点和默认站位。"
+          }
+        ]
+      }
+    ]
+  },
+  "phases": [
+    {
+      "id": "p1",
+      "title": "P1阶段",
+      "name": "P1",
+      "mechanics": [
+        {
+          "id": "void-expansion",
+          "name": "无之膨胀",
+          "name_en": "Demo mechanic name",
+          "name_ja": "デモ名称",
+          "name_ch": "无之膨胀",
+          "href": "#void-expansion"
+        }
+      ],
+      "subtitle": "字段演示",
+      "base": "00:00.000",
+      "href": "/demo/enou/p1"
+    }
+  ],
+  "phase_contents": [
+    {
+      "phase_id": "p1",
+      "sections": [
+        {
+          "id": "void-expansion",
+          "type": "separator",
+          "title": "无之膨胀（连线球 + 黑球分摊）"
+        },
+        {
+          "id": "void-expansion-mechanic",
+          "type": "mechanic",
+          "title": "机制说明",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "BOSS连线场外大黑洞并激活。黑洞释放钢铁或月环AOE，同时小黑球点名奶妈连线，需要T挡枪、人群分摊。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "void-expansion-solution",
+          "type": "solution",
+          "title": "黑洞基准",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "以BOSS指向的场外黑洞为12点。双球时MT组左、ST组右；单球时全员集合。T在人群后面挡枪，人群靠近BOSS。"
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "此处Beta是字段演示，不代表原文中这套解法被标注为Beta。"
+                }
+              ]
+            }
+          ],
+          "beta": true
+        },
+        {
+          "id": "void-expansion-note",
+          "type": "note",
+          "title": "防护职能注意",
+          "roles": [
+            "tank"
+          ],
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "站位顺序：",
+                  "style": {
+                    "bold": true,
+                    "color": "#245bdb"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "黑球 → T → 人群 → BOSS。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "multi-solution-demo",
+          "type": "multi_solution",
+          "title": "多解法演示",
+          "solutions": [
+            {
+              "id": "solution-a-demo",
+              "title": "演示方案A",
+              "beta": true,
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "演示：以场外黑洞为基准。"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "solution-b-demo",
+              "title": "演示方案B",
+              "beta": false,
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "演示：以BOSS为基准。false不表示已经验证。"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "defaultSolution": "solution-a-demo"
+        },
+        {
+          "id": "collapse-demo",
+          "type": "collapse",
+          "title": "补充说明演示",
+          "summary": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "点击查看补充内容"
+                }
+              ]
+            }
+          ],
+          "details": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "此处保存折叠后的详细内容。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "body-demo",
+          "type": "content",
+          "title": "全部正文类型演示",
+          "content": [
+            {
+              "type": "paragraph",
+              "align": "center",
+              "indent": 1,
+              "content": [
+                {
+                  "type": "text",
+                  "text": "全部样式演示",
+                  "style": {
+                    "bold": true,
+                    "italic": true,
+                    "underline": true,
+                    "strike": false,
+                    "color": "#d83931",
+                    "background_color": "#fff5eb",
+                    "font_size_px": 20
+                  },
+                  "href": "https://example.com/reference"
+                },
+                {
+                  "type": "hard_break"
+                },
+                {
+                  "type": "text",
+                  "text": "换行后的文字。"
+                }
+              ]
+            },
+            {
+              "type": "heading",
+              "level": 7,
+              "align": "left",
+              "indent": 0,
+              "content": [
+                {
+                  "type": "text",
+                  "text": "保留原文七级标题"
+                }
+              ]
+            },
+            {
+              "type": "image",
+              "src": "assets/demo-image.png",
+              "alt": "演示占位图片",
+              "caption": [
+                {
+                  "type": "text",
+                  "text": "演示图注"
+                }
+              ],
+              "width": 1280,
+              "height": 720,
+              "align": "center"
+            },
+            {
+              "type": "list",
+              "ordered": true,
+              "start": 1,
+              "items": [
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "第一步：观察连线。"
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "第二步：寻找安全区。"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "list",
+                    "ordered": false,
+                    "items": [
+                      [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "无序嵌套列表演示。"
+                            }
+                          ]
+                        }
+                      ]
+                    ]
+                  }
+                ]
+              ]
+            },
+            {
+              "type": "table",
+              "column_widths_px": [
+                160,
+                320
+              ],
+              "rows": [
+                {
+                  "cells": [
+                    {
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "演示合并表头"
+                            }
+                          ]
+                        }
+                      ],
+                      "row_span": 1,
+                      "col_span": 2,
+                      "header": true,
+                      "background_color": "#f0f4ff"
+                    }
+                  ]
+                },
+                {
+                  "cells": [
+                    {
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "第一列"
+                            }
+                          ]
+                        }
+                      ],
+                      "row_span": 1,
+                      "col_span": 1,
+                      "header": false
+                    },
+                    {
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "第二列"
+                            }
+                          ]
+                        }
+                      ],
+                      "row_span": 1,
+                      "col_span": 1,
+                      "header": false
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "columns",
+              "columns": [
+                {
+                  "width_weight": 2,
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "左列文字。"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "width_weight": 1,
+                  "content": [
+                    {
+                      "type": "image",
+                      "src": "assets/demo-right.png"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "callout",
+              "icon": "🛡️",
+              "background_color": "#f0f4ff",
+              "border_color": "#bacefd",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "提示框演示。"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "quote",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "引用文字演示。"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "code",
+              "text": "/p 【演示宏】MT组左，ST组右\n/p T挡枪，人群靠近BOSS",
+              "language": "plain_text",
+              "wrap": true
+            },
+            {
+              "type": "divider"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+[Unit]
+Description=Twice-daily MMW certificate renewal
+
+[Timer]
+OnCalendar=*-*-* 03,15:30
+RandomizedDelaySec=1h
+Persistent=true
+Unit=mmw-cert-renew.service
+
+[Install]
+WantedBy=timers.target

@@ -3,7 +3,7 @@ import { validateStrategy } from './validation.ts';
 
 export type Node = { tag: string; attrs: Record<string, string>; children: (Node | string)[] };
 export type Issue = { code: string; source: string; location: string; reason: string };
-export type Snapshot = { documentId: string; revision: number; title: string; content: string; url: string; sheets: Record<string, any>; images: Record<string, { src?: string; sha256?: string; error?: string }> };
+export type Snapshot = { documentId: string; revision: number; title: string; content: string; tree?: Node; sourceWarnings?: Issue[]; url: string; sheets: Record<string, any>; images: Record<string, { src?: string; sha256?: string; error?: string }> };
 export type Options = { dutyId: string; dutyName: string; dutyType?: string; profile: 'legacy' | 'standard' };
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 export const fingerprint = (value: any) => hash(JSON.stringify(value));
@@ -60,9 +60,9 @@ export function color(text: string): string {
 
 // 输出候选攻略及诊断；排除决策由 CLI 在展示具体清单后执行，此函数从不授权丢弃。
 export function convert(snapshot: Snapshot, options: Options) {
-  const unsupported: Issue[] = [], warnings: Issue[] = [], blockers: Issue[] = [];
+  const unsupported: Issue[] = [], warnings: Issue[] = [...(snapshot.sourceWarnings ?? [])], blockers: Issue[] = [];
   let location = '文档开头';
-  const root = parseXml(snapshot.content);
+  const root = snapshot.tree ?? parseXml(snapshot.content);
   const source = (n: Node) => n.attrs.id || `fragment-${hash(JSON.stringify(n)).slice(0, 16)}`;
   const id = (n: Node, prefix: string) => `${prefix}-${hash(snapshot.documentId + ':' + source(n)).slice(0, 16)}`;
   function issue(list: Issue[], n: Node, code: string, reason: string) { list.push({ code, source: source(n), location, reason }); }
@@ -98,6 +98,7 @@ export function convert(snapshot: Snapshot, options: Options) {
   function body(n: Node): any[] {
     try {
       const a = n.attrs, t = n.tag;
+      if (t === 'unsupported') return reject(n, a.type || '飞书内容尚未适配（含内部内容）');
       if (t === 'p' || /^h[1-9]$/.test(t)) {
         const result: any = { type: t === 'p' ? 'paragraph' : 'heading', ...(t === 'p' ? {} : { level: Number(t[1]) }), content: inline(n) };
         if (a.align) result.align = a.align;

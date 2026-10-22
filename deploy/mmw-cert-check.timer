@@ -1,0 +1,11 @@
+[Unit]
+Description=Twice-daily MMW certificate check
+
+[Timer]
+OnCalendar=*-*-* 00,12:15:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=mmw-cert-check.service
+
+[Install]
+WantedBy=timers.target

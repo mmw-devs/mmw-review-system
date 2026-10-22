@@ -1,0 +1,126 @@
+# 默认关闭；完成生产准备后，在仓库变量中设置 PRODUCTION_DEPLOY_ENABLED=true。
+# 仅部署通过测试的 main 提交；不安装或修改服务器上的系统配置。
+name: Deploy production
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/deployment-log.md'
+  workflow_dispatch:
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  test:
+    if: github.ref == 'refs/heads/main' && vars.PRODUCTION_DEPLOY_ENABLED == 'true'
+    name: Test before deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run tests
+        run: |
+          npm test
+          python3 tests/deployment.test.py
+  deploy:
+    if: github.ref == 'refs/heads/main' && vars.PRODUCTION_DEPLOY_ENABLED == 'true'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare SSH credentials
+        env:
+          DEPLOY_KEY: ${{ secrets.PROD_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PROD_KNOWN_HOSTS }}
+        run: |
+          test -n "$DEPLOY_KEY" && test -n "$KNOWN_HOSTS"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+      - name: Deploy tested main revision
+        id: deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.PROD_HOST }}
+          DEPLOY_USER: ${{ secrets.PROD_USER }}
+          DEPLOY_PORT: ${{ secrets.PROD_PORT }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          test -n "$DEPLOY_HOST" && test -n "$DEPLOY_USER" && test -n "$DEPLOY_PORT"
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" "bash -s -- '$DEPLOY_SHA'" <<'REMOTE'
+          set -euo pipefail
+          cd /opt/mmw-review-system
+          test -z "$(git status --porcelain)" || { echo '部署目录有未提交文件，拒绝覆盖'; exit 1; }
+          git fetch origin main
+          git merge-base --is-ancestor "$1" origin/main || { echo '目标不属于 main，拒绝部署'; exit 1; }
+          test "$(git rev-parse origin/main)" = "$1" || { echo 'main 已更新，请运行最新提交的部署'; exit 1; }
+          git checkout --detach "$1"
+          sudo -n systemctl restart mmw-review-system
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS --max-time 5 http://127.0.0.1:4325/health | python3 -c 'import json,sys; sys.exit(json.load(sys.stdin).get("status") != "ok")'; then exit 0; fi
+            sleep 2
+          done
+          echo '本机健康检查失败；请按回滚流程处理'
+          exit 1
+          REMOTE
+      - name: Record deployment attempt
+        if: always()
+        env:
+          DEPLOY_HOST: ${{ secrets.PROD_HOST }}
+          DEPLOY_USER: ${{ secrets.PROD_USER }}
+          DEPLOY_PORT: ${{ secrets.PROD_PORT }}
+          RESULT: ${{ steps.deploy.outcome }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          line="| $(date -u +%Y-%m-%dT%H:%M:%SZ) | $DEPLOY_SHA | $GITHUB_ACTOR | $RESULT | CI $GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT |"
+          printf '%s\n' "$line" >> "$GITHUB_STEP_SUMMARY"
+          if test -s ~/.ssh/deploy_key && test -n "$DEPLOY_HOST" && test -n "$DEPLOY_USER" && test -n "$DEPLOY_PORT"; then
+            printf '%s\n' "$line" | ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              "$DEPLOY_USER@$DEPLOY_HOST" 'cat >> /opt/mmw-review-system/data/deployments.log' \
+              || echo '::warning::无法写入服务器部署日志，请使用运行摘要补录。'
+          fi
+  log:
+    needs: [test, deploy]
+    if: always() && github.ref == 'refs/heads/main' && vars.PRODUCTION_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Record result through a pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESULT: ${{ needs.deploy.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          branch="codex/deploy-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          line="| $(date -u +%Y-%m-%dT%H:%M:%SZ) | $DEPLOY_SHA | $GITHUB_ACTOR | $RESULT | 测试 $TEST_RESULT；CI $GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT |"
+          printf '%s\n' "$line" >> "$GITHUB_STEP_SUMMARY"
+          git switch -c "$branch"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          printf '%s\n' "$line" >> docs/deployment-log.md
+          git add docs/deployment-log.md
+          git commit -m "docs: 记录部署 ${DEPLOY_SHA:0:7}"
+          if git push origin "$branch"; then
+            printf '自动记录本次部署运行。部署任务结果：%s；前置测试：%s。详情见 Actions 运行 %s/%s。\n' \
+              "$RESULT" "$TEST_RESULT" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > /tmp/deploy-pr-body.md
+            gh pr create --base main --head "$branch" --title "docs: 记录部署 ${DEPLOY_SHA:0:7}" --body-file /tmp/deploy-pr-body.md \
+              || echo '::warning::日志 PR 创建失败，请从运行摘要手工补录。'
+          else
+            echo '::warning::日志分支推送失败，请从运行摘要手工补录。'
+          fi

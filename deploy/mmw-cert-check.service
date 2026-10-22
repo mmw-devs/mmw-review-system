@@ -1,0 +1,14 @@
+[Unit]
+Description=MMW review TLS certificate and HTTPS health check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/mmw-review/alert.env
+ExecStart=/usr/bin/bash /opt/mmw-review-system/deploy/cert-check.sh
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

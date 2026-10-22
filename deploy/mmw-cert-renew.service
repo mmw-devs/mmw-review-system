@@ -1,0 +1,9 @@
+[Unit]
+Description=Renew MMW Let's Encrypt IP certificate
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+TimeoutStartSec=600
+ExecStart=/snap/bin/certbot renew --quiet --deploy-hook "systemctl reload nginx"

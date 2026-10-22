@@ -1,0 +1,49 @@
+# 草稿：尚未安装到服务器。
+# 目标路径：/etc/systemd/system/mmw-review-system.service
+#
+# 安装前替换 @SERVICE_USER@、@SERVICE_GROUP@、@NODE_BIN@。
+# 用户与 Node 路径在目标主机核对，仅在本地渲染，不提交实际生产值。
+# 必须先准备权限受限的 .env.local 和可写 data/ 目录。
+
+[Unit]
+Description=MMW review service (Feishu H5)
+Documentation=file:///opt/mmw-review-system/docs/review-server.md
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_GROUP@
+WorkingDirectory=/opt/mmw-review-system
+
+# 显式使用绝对路径，避免 PATH 中的 pi-node/nvm 影响服务运行时。
+ExecStart=@NODE_BIN@ --env-file=/opt/mmw-review-system/.env.local src/review-server.ts
+
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+KillSignal=SIGTERM
+UMask=0077
+
+# 进程加固。
+# 注意：不要添加 MemoryDenyWriteExecute=true，V8 JIT 需要可写可执行内存。
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+
+# 只允许写数据目录；该目录必须预先创建，否则单元启动失败。
+ReadWritePaths=/opt/mmw-review-system/data
+
+[Install]
+WantedBy=multi-user.target

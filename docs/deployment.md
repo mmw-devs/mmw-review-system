@@ -1,6 +1,6 @@
 # 部署手册
 
-> 状态：未来生产部署的骨架。本文件由 `AGENTS.md` §4 与 §7 引用。当前可用的是命令行转换器，运行方式见[命令行说明](converter-cli.md)；没有已实现的审核 Web 服务、健康检查接口或部署 workflow。下文的服务管理与部署命令均为待补全模板，不能作为当前版本的直接操作步骤。
+> 状态：已提供 H5 服务与默认关闭的部署 workflow，尚未完成真实生产验收。当前准备顺序及模板使用方式见[部署材料](../deploy/README.md)，审核服务配置见[服务说明](review-server.md)。下文保留的 TODO 是待验收与完善事项。
 > **生产主机、端口、用户与部署密钥的值不会写在本文件中**。
 > 这些值保存在本地文件 `secrets/PROD-SERVER.md`（被 `.gitignore`
 > 忽略；参见 `AGENTS.md` §4 与 §5）。
@@ -24,7 +24,7 @@
 
 ## 2. 进程管理器
 
-> _TODO —— 二选一并在此文档记录。_ 推荐候选：
+> 当前模板采用 systemd。TODO：生产验收后确认；保留原候选说明：
 >
 > - **pm2** —— 对 Node 友好，方便自省（`pm2 ls`、`pm2 logs`、
 >   `pm2 restart mmw-review-system`）。ecosystem 配置位于
@@ -39,11 +39,11 @@
 
 ## 3. 部署目录
 
-> _TODO —— 二选一并在此文档记录。_ 常见选项：
+> 当前模板采用 `/opt/mmw-review-system`。TODO：生产验收后确认；保留原候选说明：
 >
 > - `/opt/mmw-review-system`（系统级）
 > - `/srv/mmw-review-system`（服务数据约定）
-> - `/home/ubuntu/mmw-review-system`（用户级）
+> - `${HOME}/mmw-review-system`（用户级）
 >
 > 选定后请同步更新 `AGENTS.md` §4 中的 `DEPLOY_DIR` 引用。
 
@@ -51,8 +51,8 @@
 
 ## 4. CI 部署 workflow
 
-- 触发：push 到 `main`。
-- workflow 文件：`.github/workflows/deploy.yml`（**尚未创建 —— TODO**）。
+- 触发：push 到 `main` 或从 main 手动运行，且仓库变量 `PRODUCTION_DEPLOY_ENABLED=true`。
+- workflow 文件：`.github/workflows/deploy.yml`（已创建；TODO：获批后启用并完成验收）。
 - 必需的 GitHub Actions Secrets：
   - `PROD_DEPLOY_KEY` —— 用于 `${PROD_USER}@${PROD_HOST}:${PROD_PORT}` 的 SSH 私钥内容
     （由 `gh secret set PROD_DEPLOY_KEY < secrets/PROD_DEPLOY_KEY` 上传，
@@ -60,28 +60,13 @@
   - `PROD_HOST` —— 生产主机。
   - `PROD_USER` —— 生产 SSH 用户。
   - `PROD_PORT` —— 生产 SSH 端口。
+  - `PROD_KNOWN_HOSTS` —— 已通过带外核验的 SSH 主机公钥记录。
 
 ---
 
 ## 5. 部署步骤（模板）
 
-```bash
-# 伪命令模板。${INSTALL_CMD}/${BUILD_CMD}/${RESTART_CMD} 待 §2、§3 决策后替换。
-# 生产值从 secrets/PROD-SERVER.md 加载；私钥默认也放在 secrets/PROD_DEPLOY_KEY，
-# 不要把这些值粘贴到这里。
-# shellcheck disable=SC2154
-ssh -i "$PROD_DEPLOY_KEY" -p "$PROD_PORT" "$PROD_USER@$PROD_HOST" '
-  set -euo pipefail
-  cd "${DEPLOY_DIR}"
-  git fetch --tags --prune --prune-tags origin
-  git checkout --force main
-  git reset --hard origin/main
-  ${INSTALL_CMD}        # 例："npm ci"
-  ${BUILD_CMD}          # 例："npm run build"
-  ${RESTART_CMD}        # 例："pm2 restart mmw-review-system"
-                        #  或 "systemctl restart mmw-review-system"
-'
-```
+当前 workflow 使用 systemd 和 `/opt/mmw-review-system`。它先运行测试，再检查干净工作区和最新 main 提交，检出该提交并重启。具体准备步骤见[部署材料](../deploy/README.md)。TODO：完成真实部署验收；不要执行旧的强制重置模板。
 
 ---
 
@@ -90,7 +75,7 @@ ssh -i "$PROD_DEPLOY_KEY" -p "$PROD_PORT" "$PROD_USER@$PROD_HOST" '
 _TODO —— 至少写一条 curl/grep 探测验证服务可用。例如：_
 
 ```bash
-curl -fsS "https://${PROD_HOST}/healthz" | jq .
+curl -fsS "https://${PROD_HOST}/health" | jq .
 ```
 
 ---

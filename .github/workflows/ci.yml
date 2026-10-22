@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (Node 24)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run converter tests
+        run: node tests/converter.test.ts
+      - name: Run review service tests
+        run: node tests/review.test.ts
+      - name: Check deployment scripts offline
+        run: python3 tests/deployment.test.py

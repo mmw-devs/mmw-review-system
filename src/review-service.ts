@@ -83,31 +83,27 @@ export class ReviewService {
   async assetFile(task: any, relative: string) {
     if (!/^assets\/[a-f0-9]{24}\.(png|jpg|gif|webp)$/.test(relative)) throw new AppError(400, '图片路径无效');
     const file = path.join(this.dir(task.id), relative);
-    try { const info = await lstat(file); if (!info.isFile() || info.isSymbolicLink() || info.size > 50 * 1024 * 1024) throw new Error(); return await readFile(file); }
+    try { const info = await lstat(file); if (!info.isFile() || info.isSymbolicLink()) throw new Error(); return await readFile(file); }
     catch { throw new AppError(409, '图片文件缺失或无效，请重新获取'); }
   }
-  async checked(actor: string, id: string, sameVersion = false, asset?: string, checkImages = true) {
+  async checked(actor: string, id: string) {
     const task = this.task(actor, id); if (task.reading !== 'ready') throw new AppError(409, '读取尚未就绪');
-    const memberVersion = this.auth.reviewer(actor).version; const files = await this.files(task, checkImages && !asset);
+    const memberVersion = this.auth.reviewer(actor).version; const files = await this.files(task, false);
     const check = () => { this.checkpoint(actor, memberVersion); const current = this.task(actor, id); if (current.version !== task.version) throw new AppError(409, '任务状态已变化，请刷新'); };
-    const references = new Set<string>();
-    const visit = (v: any) => { if (!v || typeof v !== 'object') return; if (v.type === 'image' && v.src) references.add(v.src); Object.values(v).forEach(visit); }; visit(files.result.document);
-    if (asset && !references.has('assets/' + asset)) throw new AppError(404, '图片不在当前预览中');
-    const imageIds = checkImages ? Object.entries(files.snapshot.images).filter(([, i]) => i.src && (asset ? i.src === 'assets/' + asset : references.has(i.src))).map(([id]) => id) : [];
-    await this.apiFactory(actor, check).check(files.snapshot, imageIds, sameVersion); check();
+    await this.apiFactory(actor, check).check(files.snapshot); check();
     return { task, ...files, check };
   }
   async detail(actor: string, id: string) {
     const task = this.task(actor, id);
     if (task.reading !== 'ready') return { id, version: task.version, reading: task.reading, review: task.review, conversion: task.conversion, error: task.error };
-    const value = await this.checked(actor, id, false, undefined, false);
+    const value = await this.checked(actor, id);
     return { ...task, snapshotRevision: value.snapshot.revision, title: value.snapshot.title, result: value.result, ...(task.reviewMode === 'phases' ? { units: reviewUnits(value.result.document).map((u: any) => ({ ...u, ...(task.unitReviews?.[u.id] ?? { review: 'pending' }) })) } : {}) };
   }
   async locked<T>(id: string, action: () => Promise<T>): Promise<T> { if (this.busy.has(id)) throw new AppError(409, '此任务正在处理，请稍后刷新'); this.busy.add(id); try { return await action(); } finally { this.busy.delete(id); } }
   async review(actor: string, id: string, input: any) {
     return this.locked(id, async () => {
       if (!['approved', 'rejected'].includes(input.decision) || typeof input.comment !== 'string' || input.comment.length > 2000) throw new AppError(400, '审核参数无效');
-      const { task, result, check } = await this.checked(actor, id, input.decision === 'approved', undefined, false);
+      const { task, result, check } = await this.checked(actor, id);
       if (input.snapshotHash !== task.snapshotHash) throw new AppError(409, '审核内容已变化');
       if (task.reviewMode === 'phases') {
         const units = reviewUnits(result.document);
@@ -154,17 +150,26 @@ export class ReviewService {
     });
   }
   async image(actor: string, id: string, name: string) {
-    const { task, snapshot, check } = await this.checked(actor, id, false, name);
-    const src = `assets/${name}`; if (!Object.values(snapshot.images).some(i => i.src === src)) throw new AppError(404, '图片不存在');
-    const bytes = await this.assetFile(task, src); if (hash(bytes) !== Object.values(snapshot.images).find(i => i.src === src)?.sha256) throw new AppError(409, '图片已变化'); check(); return bytes;
+    const task = this.task(actor, id);
+    if (task.reading !== 'ready') throw new AppError(409, '读取尚未就绪');
+    let snapshot: any;
+    try { snapshot = JSON.parse(await readFile(path.join(this.dir(id), 'snapshot.json'), 'utf8')); }
+    catch { throw new AppError(409, '任务快照不完整，请重新获取'); }
+    if (snapshot.snapshot_version !== 2 || fingerprint(snapshot) !== task.snapshotHash) throw new AppError(409, '快照已变化，请重新获取');
+    const src = `assets/${name}`;
+    const image = Object.values(snapshot.images).find((i: any) => i.src === src);
+    if (!image) throw new AppError(404, '图片不存在');
+    const bytes = await this.assetFile(task, src);
+    if (hash(bytes) !== image.sha256) throw new AppError(409, '图片已变化，请重新获取');
+    return bytes;
   }
   async export(actor: string, id: string) {
     const { task, result, snapshot, check } = await this.checked(actor, id);
     if (task.conversion !== 'completed' || !canExport(task, result.document)) throw new AppError(409, '暂无正式产物');
     const json = await readFile(path.join(this.dir(id), 'strategy.json')); if (hash(json) !== task.artifactHash) throw new AppError(409, '正式产物已变化');
     const names = new Set<string>(); const walk = (v: any) => { if (!v || typeof v !== 'object') return; if (v.type === 'image' && typeof v.src === 'string') names.add(v.src); Object.values(v).forEach(walk); }; walk(result.document);
-    const entries = [{ name: 'strategy.json', bytes: json }]; let total = json.length;
-    for (const name of names) { const bytes = await this.assetFile(task, name); if (hash(bytes) !== Object.values(snapshot.images).find(i => i.src === name)?.sha256) throw new AppError(409, '图片已变化'); total += bytes.length; if (total > 200 * 1024 * 1024) throw new AppError(413, '产物超过单次下载上限，请联系管理员'); entries.push({ name, bytes }); }
+    const entries = [{ name: 'strategy.json', bytes: json }];
+    for (const name of names) { const bytes = await this.assetFile(task, name); if (hash(bytes) !== Object.values(snapshot.images).find(i => i.src === name)?.sha256) throw new AppError(409, '图片已变化'); entries.push({ name, bytes }); }
     check(); return tar(entries);
   }
 }

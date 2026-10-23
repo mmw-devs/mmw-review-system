@@ -35,7 +35,7 @@ export class FeishuApi {
       }
       if (response.status === 401) { await response.body?.cancel(); throw new ApiError('authorization', '飞书授权已失效，请重新授权'); }
       if (!response.ok) { await response.body?.cancel(); throw new ApiError('permission', '飞书资源不存在或当前身份无权访问'); }
-      const bytes = await readLimited(response, binary ? 50 * 1024 * 1024 : 24 * 1024 * 1024);
+      const bytes = await readLimited(response, binary ? Number.POSITIVE_INFINITY : 24 * 1024 * 1024);
       this.checkpoint();
       if (binary && !response.headers.get('content-type')?.includes('json')) return bytes;
       let json: any;
@@ -87,13 +87,11 @@ export class FeishuApi {
       return messages.map(reason => ({ code: 'DISPLAY', source: block.block_id, location: '来源文档', reason }));
     });
     await mkdir(path.join(runDir, 'assets'), { recursive: true, mode: 0o700 });
-    let assetBytes = 0;
     for (const block of blocks) {
       if (block.block_type === 27 && block.image?.token) {
         try {
           const bytes = await this.media(block.image.token); let ext: string;
           try { ext = imageExtension(bytes); } catch { throw new ApiError('structure', '素材文件不是支持的图片格式'); }
-          assetBytes += bytes.length; if (assetBytes > 200 * 1024 * 1024) throw new ApiError('limit', '本次图片总量超过 200 MB 上限');
           const src = `assets/${digest(id + ':' + block.block_id).slice(0, 24)}.${ext}`;
           await writeFile(path.join(runDir, src), bytes, { flag: 'wx', mode: 0o600 });
           snapshot.images[block.block_id] = { src, sha256: digest(bytes) };
@@ -109,19 +107,13 @@ export class FeishuApi {
     await writeFile(path.join(runDir, 'snapshot.json'), JSON.stringify(snapshot, null, 2), { flag: 'wx', mode: 0o600 });
     return snapshot;
   }
-  async check(snapshot: ApiSnapshot, retainedImages = Object.keys(snapshot.images), sameVersion = false) {
+  async check(snapshot: ApiSnapshot) {
     if (await this.resolve(snapshot.url) !== snapshot.documentId) fail('原文地址的目标已变化，请重新获取');
     const meta = await this.meta(snapshot.documentId);
     if (!meta?.document_id) fail('未能确认原文访问权限');
-    if (sameVersion && meta.revision_id !== snapshot.revision) fail('原文已更新，请重新获取并审核');
     // 实际读取正文验证权限，元信息成功不作为正文可读的替代。
     const response = await this.request(`/open-apis/docx/v1/documents/${snapshot.documentId}/blocks?page_size=1`);
     if (!Array.isArray(response?.items)) fail('未能确认正文访问权限');
-    for (const blockId of retainedImages) {
-      const block = snapshot.blocks.find(b => b.block_id === blockId);
-      if (!block?.image?.token) fail('图片来源信息缺失');
-      await this.media(block.image.token);
-    }
     this.checkpoint();
   }
 }

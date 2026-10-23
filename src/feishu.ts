@@ -105,7 +105,6 @@ export class Feishu {
             const cwd = mediaWorkdir ?? runDir;
             await this.call(['docs', '+media-download', '--token', token, '--output', tempName], cwd);
             const downloaded = path.join(cwd, tempName);
-            if ((await stat(downloaded)).size > 50 * 1024 * 1024) throw new Error('图片超过 50 MB，暂不转换');
             const bytes = await readFile(downloaded), extension = imageExtension(bytes);
             const relative = `assets/${basename}.${extension}`;
             await copyFile(downloaded, path.join(runDir, relative));

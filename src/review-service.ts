@@ -8,7 +8,12 @@ import { convert, fingerprint } from './converter.ts';
 import type { Options } from './converter.ts';
 import { documentUrl } from './feishu.ts';
 
-const CONVERTER_VERSION = 'review-1';
+const CONVERTER_VERSION = 'review-2';
+const converterVersion = (task: any) => task.reviewMode === 'phases' ? CONVERTER_VERSION : 'review-1';
+// 副本信息和各 P 独立审核；整篇通过必须由服务端按完整单元清单汇总。
+function reviewUnits(document: any) {
+  return [{ id: 'basic', title: '副本基本信息' }, ...document.phases.map((p: any) => ({ id: p.id, title: p.title }))];
+}
 export class ReviewService {
   auth: Auth; apiFactory: (actor: string, check: () => void) => FeishuApi;
   jobs = new Map<string, Promise<void>>(); busy = new Set<string>();
@@ -32,7 +37,7 @@ export class ReviewService {
     if (!/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(input.dutyId ?? '') || typeof input.dutyName !== 'string' || !input.dutyName.trim() || input.dutyName.length > 200 || !['legacy', 'standard'].includes(input.profile ?? 'legacy')) throw new AppError(400, '副本 ID、名称或标题模式无效');
     if (input.dutyType != null && (typeof input.dutyType !== 'string' || input.dutyType.length > 100)) throw new AppError(400, '副本类型无效');
     const options: Options = { dutyId: input.dutyId, dutyName: input.dutyName.trim(), profile: input.profile ?? 'legacy', ...(input.dutyType ? { dutyType: input.dutyType } : {}) };
-    const id = random(), task = { id, owner: actor, url, options, version: 1, generation: parent ? parent.generation + 1 : 1, parent: parent?.id, created: new Date().toISOString(), reading: 'queued', review: 'pending', conversion: 'not_started' };
+    const id = random(), task = { id, owner: actor, url, options, version: 1, generation: parent ? parent.generation + 1 : 1, parent: parent?.id, created: new Date().toISOString(), reading: 'queued', reviewMode: 'phases', unitReviews: {}, review: 'pending', conversion: 'not_started' };
     this.auth.store.put('task', id, task); this.auth.store.audit(actor, 'task-create', id);
     const job = this.read(actor, id, m.version).finally(() => this.jobs.delete(id)); this.jobs.set(id, job);
     return task;
@@ -43,10 +48,10 @@ export class ReviewService {
       const check = () => this.checkpoint(actor, memberVersion); check(); task.reading = 'reading'; store.put('task', id, task);
       const dir = this.dir(id); await mkdir(dir, { recursive: true, mode: 0o700 });
       const snapshot = await this.apiFactory(actor, check).read(task.url, dir); check();
-      const result = convert(snapshot, task.options); const snapshotHash = fingerprint(snapshot);
-      const consent = fingerprint({ snapshotHash, options: task.options, reader: READER_VERSION, converter: CONVERTER_VERSION, result });
+      const result = convert(snapshot, task.options, task.reviewMode === 'phases'); const snapshotHash = fingerprint(snapshot);
+      const consent = fingerprint({ snapshotHash, options: task.options, reader: READER_VERSION, converter: converterVersion(task), result });
       await writeFile(path.join(dir, 'candidate.json'), JSON.stringify(result.document, null, 2), { flag: 'wx', mode: 0o600 });
-      await writeFile(path.join(dir, 'report.json'), JSON.stringify({ ...result, digest: consent, snapshotHash, converter: CONVERTER_VERSION }, null, 2), { flag: 'wx', mode: 0o600 });
+      await writeFile(path.join(dir, 'report.json'), JSON.stringify({ ...result, digest: consent, snapshotHash, converter: converterVersion(task) }, null, 2), { flag: 'wx', mode: 0o600 });
       check(); task = { ...task, reading: 'ready', snapshotHash, digest: consent, conversion: result.unsupported.length ? 'needs_confirmation' : 'not_started', version: task.version + 1 };
       store.put('task', id, task);
     } catch (e) {
@@ -61,9 +66,9 @@ export class ReviewService {
     try { snapshot = JSON.parse(await readFile(path.join(this.dir(task.id), 'snapshot.json'), 'utf8')); report = JSON.parse(await readFile(path.join(this.dir(task.id), 'report.json'), 'utf8')); }
     catch { throw new AppError(409, '任务快照或报告不完整，请重新获取'); }
     if (snapshot.snapshot_version !== 2 || fingerprint(snapshot) !== task.snapshotHash) throw new AppError(409, '快照已变化，请重新获取并审核');
-    const result = convert(snapshot, task.options);
-    const digest = fingerprint({ snapshotHash: task.snapshotHash, options: task.options, reader: READER_VERSION, converter: CONVERTER_VERSION, result });
-    if (digest !== task.digest || report.digest !== digest || report.converter !== CONVERTER_VERSION) throw new AppError(409, '规则、配置或清单已变化，请重新获取并审核');
+    const result = convert(snapshot, task.options, task.reviewMode === 'phases');
+    const digest = fingerprint({ snapshotHash: task.snapshotHash, options: task.options, reader: READER_VERSION, converter: converterVersion(task), result });
+    if (digest !== task.digest || report.digest !== digest || report.converter !== converterVersion(task)) throw new AppError(409, '规则、配置或清单已变化，请重新获取并审核');
     for (const value of Object.values(snapshot.images)) if (verifyImages && value.src) {
       const bytes = await this.assetFile(task, value.src); if (hash(bytes) !== value.sha256) throw new AppError(409, '本地图片已变化，请重新获取');
     }
@@ -90,14 +95,28 @@ export class ReviewService {
     const task = this.task(actor, id);
     if (task.reading !== 'ready') return { id, version: task.version, reading: task.reading, review: task.review, conversion: task.conversion, error: task.error };
     const value = await this.checked(actor, id);
-    return { ...task, snapshotRevision: value.snapshot.revision, title: value.snapshot.title, result: value.result };
+    return { ...task, snapshotRevision: value.snapshot.revision, title: value.snapshot.title, result: value.result, ...(task.reviewMode === 'phases' ? { units: reviewUnits(value.result.document).map((u: any) => ({ ...u, ...(task.unitReviews?.[u.id] ?? { review: 'pending' }) })) } : {}) };
   }
   async locked<T>(id: string, action: () => Promise<T>): Promise<T> { if (this.busy.has(id)) throw new AppError(409, '此任务正在处理，请稍后刷新'); this.busy.add(id); try { return await action(); } finally { this.busy.delete(id); } }
   async review(actor: string, id: string, input: any) {
     return this.locked(id, async () => {
       if (!['approved', 'rejected'].includes(input.decision) || typeof input.comment !== 'string' || input.comment.length > 2000) throw new AppError(400, '审核参数无效');
-      const { task, check } = await this.checked(actor, id, input.decision === 'approved');
+      const { task, result, check } = await this.checked(actor, id, input.decision === 'approved');
       if (input.snapshotHash !== task.snapshotHash) throw new AppError(409, '审核内容已变化');
+      if (task.reviewMode === 'phases') {
+        const units = reviewUnits(result.document);
+        if (!units.some((u: any) => u.id === input.unitId)) throw new AppError(400, '审核页面不存在，请选择副本基本信息或一个 P');
+        if (input.digest !== task.digest) throw new AppError(409, '切分内容或转换规则已变化，请刷新');
+        const previous = task.unitReviews?.[input.unitId];
+        if (previous?.review === input.decision && previous.comment === input.comment) return task;
+        if (task.version !== input.version || previous || ['completed', 'cancelled'].includes(task.conversion)) throw new AppError(409, '审核状态已变化，请刷新；修改原文请重新获取');
+        check();
+        task.unitReviews = { ...task.unitReviews, [input.unitId]: { review: input.decision, comment: input.comment, reviewer: actor, reviewedAt: new Date().toISOString(), digest: task.digest, snapshotHash: task.snapshotHash } };
+        task.review = units.some((u: any) => task.unitReviews[u.id]?.review === 'rejected') ? 'rejected' : units.every((u: any) => task.unitReviews[u.id]?.review === 'approved') ? 'approved' : 'pending';
+        task.version++;
+        this.auth.store.transaction(() => { this.auth.store.put('task', id, task); this.auth.store.audit(actor, 'review-' + input.decision, id, { unitId: input.unitId, snapshotHash: task.snapshotHash, digest: task.digest }); });
+        return task;
+      }
       if (task.review === input.decision && task.comment === input.comment) return task;
       if (task.version !== input.version || task.review !== 'pending') throw new AppError(409, '审核状态已变化，请刷新；修改原文请重新获取');
       check(); task.review = input.decision; task.comment = input.comment; task.reviewedAt = new Date().toISOString(); task.version++;
@@ -107,7 +126,7 @@ export class ReviewService {
   async conversion(actor: string, id: string, input: any) {
     return this.locked(id, async () => {
       const { task, result, check } = await this.checked(actor, id);
-      if (task.review !== 'approved') throw new AppError(409, '需要先人工审核通过');
+      if (task.review !== 'approved' || (task.reviewMode === 'phases' && !reviewUnits(result.document).every((u: any) => task.unitReviews?.[u.id]?.review === 'approved' && task.unitReviews[u.id].digest === task.digest))) throw new AppError(409, '需要先人工审核通过');
       if (input.digest !== task.digest) throw new AppError(409, '排除清单或转换规则已变化，请刷新');
       if (task.conversion === 'completed' && input.action === 'export') return task;
       if (task.conversion === 'cancelled' && input.action === 'cancel') return task;

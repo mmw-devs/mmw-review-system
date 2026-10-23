@@ -14,6 +14,12 @@ const converterVersion = (task: any) => task.reviewMode === 'phases' ? CONVERTER
 function reviewUnits(document: any) {
   return [{ id: 'basic', title: '副本基本信息' }, ...document.phases.map((p: any) => ({ id: p.id, title: p.title }))];
 }
+// 导出资格与整篇审核状态分开：新任务至少一个 P 通过即可，副本基本信息不计入。
+function canExport(task: any, document: any) {
+  return task.reviewMode === 'phases'
+    ? document.phases.some((p: any) => task.unitReviews?.[p.id]?.review === 'approved' && task.unitReviews[p.id].digest === task.digest)
+    : task.review === 'approved';
+}
 export class ReviewService {
   auth: Auth; apiFactory: (actor: string, check: () => void) => FeishuApi;
   jobs = new Map<string, Promise<void>>(); busy = new Set<string>();
@@ -109,7 +115,7 @@ export class ReviewService {
         if (input.digest !== task.digest) throw new AppError(409, '切分内容或转换规则已变化，请刷新');
         const previous = task.unitReviews?.[input.unitId];
         if (previous?.review === input.decision && previous.comment === input.comment) return task;
-        if (task.version !== input.version || previous || ['completed', 'cancelled'].includes(task.conversion)) throw new AppError(409, '审核状态已变化，请刷新；修改原文请重新获取');
+        if (task.version !== input.version || previous || task.conversion === 'cancelled') throw new AppError(409, '审核状态已变化，请刷新；修改原文请重新获取');
         check();
         task.unitReviews = { ...task.unitReviews, [input.unitId]: { review: input.decision, comment: input.comment, reviewer: actor, reviewedAt: new Date().toISOString(), digest: task.digest, snapshotHash: task.snapshotHash } };
         task.review = units.some((u: any) => task.unitReviews[u.id]?.review === 'rejected') ? 'rejected' : units.every((u: any) => task.unitReviews[u.id]?.review === 'approved') ? 'approved' : 'pending';
@@ -126,7 +132,7 @@ export class ReviewService {
   async conversion(actor: string, id: string, input: any) {
     return this.locked(id, async () => {
       const { task, result, check } = await this.checked(actor, id);
-      if (task.review !== 'approved' || (task.reviewMode === 'phases' && !reviewUnits(result.document).every((u: any) => task.unitReviews?.[u.id]?.review === 'approved' && task.unitReviews[u.id].digest === task.digest))) throw new AppError(409, '需要先人工审核通过');
+      if (!canExport(task, result.document)) throw new AppError(409, '需要先人工审核通过至少一个 P；旧任务仍需整篇通过');
       if (input.digest !== task.digest) throw new AppError(409, '排除清单或转换规则已变化，请刷新');
       if (task.conversion === 'completed' && input.action === 'export') return task;
       if (task.conversion === 'cancelled' && input.action === 'cancel') return task;
@@ -154,7 +160,7 @@ export class ReviewService {
   }
   async export(actor: string, id: string) {
     const { task, result, snapshot, check } = await this.checked(actor, id);
-    if (task.conversion !== 'completed' || task.review !== 'approved') throw new AppError(409, '暂无正式产物');
+    if (task.conversion !== 'completed' || !canExport(task, result.document)) throw new AppError(409, '暂无正式产物');
     const json = await readFile(path.join(this.dir(id), 'strategy.json')); if (hash(json) !== task.artifactHash) throw new AppError(409, '正式产物已变化');
     const names = new Set<string>(); const walk = (v: any) => { if (!v || typeof v !== 'object') return; if (v.type === 'image' && typeof v.src === 'string') names.add(v.src); Object.values(v).forEach(walk); }; walk(result.document);
     const entries = [{ name: 'strategy.json', bytes: json }]; let total = json.length;

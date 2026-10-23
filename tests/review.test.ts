@@ -68,7 +68,12 @@ test('跨用户、管理角色、撤销审核角色和原文权限不能借缓�
 test('原文更新、图片权限缺失与任务快照篡改的边界',async()=>{
  const f=await fixture();try{
   const task=await f.create();f.state.revision=2;await assert.rejects(f.service.review(f.admin.actor,task.id,{decision:'approved',comment:'',version:task.version,snapshotHash:task.snapshotHash}),/原文已更新/);
-  f.state.mediaDenied=true;await assert.rejects(f.service.detail(f.admin.actor,task.id),/无权访问/);
+  f.state.mediaDenied=true;
+  await f.service.detail(f.admin.actor,task.id);
+  const snapshot=JSON.parse(await readFile(path.join(f.service.dir(task.id),'snapshot.json'),'utf8'));
+  const src=Object.values(snapshot.images).find((i:any)=>i.src)?.src;
+  assert.ok(src);
+  await assert.rejects(f.service.image(f.admin.actor,task.id,src.split('/').pop()),/无权访问/);
   const newer=await f.create();const detail=await f.service.detail(f.admin.actor,newer.id);assert.ok(detail.result.unsupported.some((i:any)=>i.reason.includes('无权访问')));
   const file=path.join(f.service.dir(newer.id),'snapshot.json');const raw=JSON.parse(await readFile(file,'utf8'));raw.title='changed';await writeFile(file,JSON.stringify(raw));await assert.rejects(f.service.detail(f.admin.actor,newer.id),/快照已变化/);
  }finally{f.store.close();}

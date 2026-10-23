@@ -86,28 +86,28 @@ export class ReviewService {
     try { const info = await lstat(file); if (!info.isFile() || info.isSymbolicLink() || info.size > 50 * 1024 * 1024) throw new Error(); return await readFile(file); }
     catch { throw new AppError(409, '图片文件缺失或无效，请重新获取'); }
   }
-  async checked(actor: string, id: string, sameVersion = false, asset?: string) {
+  async checked(actor: string, id: string, sameVersion = false, asset?: string, checkImages = true) {
     const task = this.task(actor, id); if (task.reading !== 'ready') throw new AppError(409, '读取尚未就绪');
-    const memberVersion = this.auth.reviewer(actor).version; const files = await this.files(task, !asset);
+    const memberVersion = this.auth.reviewer(actor).version; const files = await this.files(task, checkImages && !asset);
     const check = () => { this.checkpoint(actor, memberVersion); const current = this.task(actor, id); if (current.version !== task.version) throw new AppError(409, '任务状态已变化，请刷新'); };
     const references = new Set<string>();
     const visit = (v: any) => { if (!v || typeof v !== 'object') return; if (v.type === 'image' && v.src) references.add(v.src); Object.values(v).forEach(visit); }; visit(files.result.document);
     if (asset && !references.has('assets/' + asset)) throw new AppError(404, '图片不在当前预览中');
-    const imageIds = Object.entries(files.snapshot.images).filter(([, i]) => i.src && (asset ? i.src === 'assets/' + asset : references.has(i.src))).map(([id]) => id);
+    const imageIds = checkImages ? Object.entries(files.snapshot.images).filter(([, i]) => i.src && (asset ? i.src === 'assets/' + asset : references.has(i.src))).map(([id]) => id) : [];
     await this.apiFactory(actor, check).check(files.snapshot, imageIds, sameVersion); check();
     return { task, ...files, check };
   }
   async detail(actor: string, id: string) {
     const task = this.task(actor, id);
     if (task.reading !== 'ready') return { id, version: task.version, reading: task.reading, review: task.review, conversion: task.conversion, error: task.error };
-    const value = await this.checked(actor, id);
+    const value = await this.checked(actor, id, false, undefined, false);
     return { ...task, snapshotRevision: value.snapshot.revision, title: value.snapshot.title, result: value.result, ...(task.reviewMode === 'phases' ? { units: reviewUnits(value.result.document).map((u: any) => ({ ...u, ...(task.unitReviews?.[u.id] ?? { review: 'pending' }) })) } : {}) };
   }
   async locked<T>(id: string, action: () => Promise<T>): Promise<T> { if (this.busy.has(id)) throw new AppError(409, '此任务正在处理，请稍后刷新'); this.busy.add(id); try { return await action(); } finally { this.busy.delete(id); } }
   async review(actor: string, id: string, input: any) {
     return this.locked(id, async () => {
       if (!['approved', 'rejected'].includes(input.decision) || typeof input.comment !== 'string' || input.comment.length > 2000) throw new AppError(400, '审核参数无效');
-      const { task, result, check } = await this.checked(actor, id, input.decision === 'approved');
+      const { task, result, check } = await this.checked(actor, id, input.decision === 'approved', undefined, false);
       if (input.snapshotHash !== task.snapshotHash) throw new AppError(409, '审核内容已变化');
       if (task.reviewMode === 'phases') {
         const units = reviewUnits(result.document);

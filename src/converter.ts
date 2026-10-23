@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { validateStrategy } from './validation.ts';
 
 export type Node = { tag: string; attrs: Record<string, string>; children: (Node | string)[] };
-export type Issue = { code: string; source: string; location: string; reason: string };
+export type Issue = { code: string; source: string; location: string; reason: string; unitId?: string };
 export type Snapshot = { documentId: string; revision: number; title: string; content: string; tree?: Node; sourceWarnings?: Issue[]; url: string; sheets: Record<string, any>; images: Record<string, { src?: string; sha256?: string; error?: string }> };
 export type Options = { dutyId: string; dutyName: string; dutyType?: string; profile: 'legacy' | 'standard' };
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -59,13 +59,14 @@ export function color(text: string): string {
 }
 
 // 输出候选攻略及诊断；排除决策由 CLI 在展示具体清单后执行，此函数从不授权丢弃。
-export function convert(snapshot: Snapshot, options: Options) {
+export function convert(snapshot: Snapshot, options: Options, splitPhases = true) {
   const unsupported: Issue[] = [], warnings: Issue[] = [...(snapshot.sourceWarnings ?? [])], blockers: Issue[] = [];
   let location = '文档开头';
+  let reportingUnit: string | undefined = splitPhases ? 'basic' : undefined;
   const root = snapshot.tree ?? parseXml(snapshot.content);
   const source = (n: Node) => n.attrs.id || `fragment-${hash(JSON.stringify(n)).slice(0, 16)}`;
   const id = (n: Node, prefix: string) => `${prefix}-${hash(snapshot.documentId + ':' + source(n)).slice(0, 16)}`;
-  function issue(list: Issue[], n: Node, code: string, reason: string) { list.push({ code, source: source(n), location, reason }); }
+  function issue(list: Issue[], n: Node, code: string, reason: string) { list.push({ code, source: source(n), location, reason, ...(reportingUnit ? { unitId: reportingUnit } : {}) }); }
   const warn = (n: Node, reason: string) => issue(warnings, n, 'DISPLAY', reason);
   const block = (n: Node, reason: string) => issue(blockers, n, 'STRUCTURE', reason);
   const reject = (n: Node, reason: string): any[] => { issue(unsupported, n, 'UNSUPPORTED', reason); return []; };
@@ -194,11 +195,12 @@ export function convert(snapshot: Snapshot, options: Options) {
   }
   function startPhase(n: Node, number: string, title: string): void {
     flush();
-    const phaseId = `p${Number(number)}`;
+    const phaseId = `p${Number(number)}`.replace('.', '-');
     if (doc.phases.some((p: any) => p.id === phaseId)) { block(n, '阶段重复进入，不能重排正文；请修正阶段标题'); return; }
     phase = { id: phaseId, title, name: `P${Number(number)}`, mechanics: [] };
     sections = []; doc.phases.push(phase); doc.phase_contents.push({ phase_id: phase.id, sections });
     mechanism = undefined; currentLevel = 0; location = title;
+    if (splitPhases) reportingUnit = phaseId;
   }
   function startMechanic(n: Node, title: string): void {
     flush(); mechanism = id(n, 'm');
@@ -219,12 +221,12 @@ export function convert(snapshot: Snapshot, options: Options) {
         if (phase || (seenGlobals.has(globalName) && globalName !== global)) block(child, '全局内容与阶段或其他全局内容交错，不能静默重排');
         flush(); global = globalName; seenGlobals.add(global); location = title; continue;
       }
-      const purePhase = title.match(/^P(\d+)(?:阶段)?$/i);
-      const namedPhase = options.profile === 'standard' && level === 1 ? title.match(/^P(\d+)\s*[·:：-]\s*(.+)$/i) : null;
+      const purePhase = title.match(splitPhases ? /^P(\d+(?:\.5)?)(?:阶段)?$/i : /^P(\d+)(?:阶段)?$/i);
+      const namedPhase = options.profile === 'standard' && level === 1 ? title.match(splitPhases ? /^P(\d+(?:\.5)?)\s*[·:：-]\s*(.+)$/i : /^P(\d+)\s*[·:：-]\s*(.+)$/i) : null;
       if (purePhase || namedPhase) { startPhase(child, (purePhase ?? namedPhase)![1], original); continue; }
-      const composite = title.match(/^P(\d+)\s*[·:：-]\s*(.+)$/i);
+      const composite = title.match(splitPhases ? /^P(\d+(?:\.5)?)\s*[·:：-]\s*(.+)$/i : /^P(\d+)\s*[·:：-]\s*(.+)$/i);
       if (composite && options.profile === 'legacy') {
-        if (!phase || phase.id !== `p${Number(composite[1])}`) startPhase(child, composite[1], `P${Number(composite[1])}`);
+        if (!phase || phase.id !== `p${Number(composite[1])}`.replace('.', '-')) startPhase(child, composite[1], `P${Number(composite[1])}`);
         if (phase) startMechanic(child, original); continue;
       }
       if (phase && options.profile === 'standard' && level === 2) { startMechanic(child, original); continue; }
@@ -271,6 +273,7 @@ export function convert(snapshot: Snapshot, options: Options) {
     }
     content.sections = result;
   }
+  reportingUnit = undefined;
   if (!doc.phases.length) block(root, '未识别到阶段，请使用明确的 P1 阶段标题；不自动伪造阶段');
   for (const reason of validateStrategy(doc)) issue(blockers, root, 'VALIDATION', reason);
   const digest = fingerprint({ snapshot, options, unsupported, document: doc, warnings, blockers });

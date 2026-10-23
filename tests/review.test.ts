@@ -10,6 +10,8 @@ import { FeishuApi, blocksToTree, ApiError } from '../src/feishu-api.ts';
 import { ReviewService } from '../src/review-service.ts';
 import { createReviewServer } from '../src/review-server.ts';
 
+import { convert, fingerprint } from '../src/converter.ts';
+import { READER_VERSION } from '../src/feishu-api.ts';
 import { fixture, rawBlocks } from './review-fixture.ts';
 
 test('OAuth 回调校验浏览器绑定、组织、重放，普通成员不自动获得审核权限',async()=>{
@@ -43,7 +45,10 @@ test('无 CLI 读取保存原始块与图片，审核及排除确认后导出且
   const task=await f.create();assert.equal(task.reading,'ready');const d=await f.service.detail(f.admin.actor,task.id);assert.equal(d.result.unsupported.length,1);assert.equal(d.result.document.phases[0].id,'p1');
   const snap=JSON.parse(await readFile(path.join(f.service.dir(task.id),'snapshot.json'),'utf8'));assert.equal(snap.snapshot_version,2);assert.equal(snap.blocks.length,6);assert.ok(!JSON.stringify(snap).includes(f.state.token));
   await assert.rejects(f.service.conversion(f.admin.actor,task.id,{action:'export',version:task.version,digest:task.digest,discard:true}),/审核通过/);
-  const reviewed=await f.service.review(f.admin.actor,task.id,{decision:'approved',comment:'',version:task.version,snapshotHash:task.snapshotHash});
+  const basic=await f.service.review(f.admin.actor,task.id,{unitId:'basic',digest:task.digest,decision:'approved',comment:'',version:task.version,snapshotHash:task.snapshotHash});
+  assert.equal(basic.review,'pending');
+  await assert.rejects(f.service.conversion(f.admin.actor,task.id,{action:'export',version:basic.version,digest:task.digest,discard:true}),/审核通过/);
+  const reviewed=await f.service.review(f.admin.actor,task.id,{unitId:'p1',digest:task.digest,decision:'approved',comment:'',version:basic.version,snapshotHash:task.snapshotHash});
   await assert.rejects(f.service.conversion(f.admin.actor,task.id,{action:'export',version:reviewed.version,digest:task.digest}),/未明确确认/);
   await assert.rejects(f.service.conversion(f.admin.actor,task.id,{action:'export',version:reviewed.version,digest:'old',discard:true}),/已变化/);
   const done=await f.service.conversion(f.admin.actor,task.id,{action:'export',version:reviewed.version,digest:task.digest,discard:true});assert.equal(done.conversion,'completed');
@@ -118,4 +123,41 @@ test('跨主机跳转被禁止且凭证不会出现在接口错误中',async()=>
  let requested:any;const secret=random();const api=new FeishuApi(async()=>secret,(async(url:any,init:any)=>{requested={url,init};return new Response(JSON.stringify({code:99991679,msg:secret}));})as any);
  await assert.rejects(api.meta('doc'),e=>e instanceof ApiError&&e.kind==='scope'&&!e.message.includes(secret));assert.equal(requested.init.redirect,'error');assert.ok(requested.url.startsWith('https://open.feishu.cn/open-apis/'));
  await assert.rejects(api.request('https://untrusted.invalid/'),/接口地址无效/);
+});
+
+
+test('分 P 审核拒绝漏页、未知页和过期决定，驳回阻断导出，新版本全部重审',async()=>{
+ const f=await fixture();try{
+  const root=f.state.blocks[0];root.children.push('half','halfBody','p2','p2Body');
+  for(const [id,title] of [['half','P1.5'],['p2','P2']]) f.state.blocks.push({block_id:id,parent_id:'doc',block_type:3,heading1:{elements:[{text_run:{content:title}}]}},{block_id:id+'Body',parent_id:'doc',block_type:2,text:{elements:[{text_run:{content:title+' 正文'}}]}});
+  const task=await f.create();const d=await f.service.detail(f.admin.actor,task.id);
+  assert.deepEqual(d.units.map((u:any)=>u.id),['basic','p1','p1-5','p2']);
+  const input={decision:'approved',comment:'',version:task.version,snapshotHash:task.snapshotHash,digest:task.digest};
+  await assert.rejects(f.service.review(f.admin.actor,task.id,input),/页面不存在/);
+  await assert.rejects(f.service.review(f.admin.actor,task.id,{...input,unitId:'p3'}),/页面不存在/);
+  await assert.rejects(f.service.review(f.admin.actor,task.id,{...input,unitId:'basic',digest:'old'}),/已变化/);
+  const basic=await f.service.review(f.admin.actor,task.id,{...input,unitId:'basic'});
+  const same=await f.service.review(f.admin.actor,task.id,{...input,unitId:'basic'});assert.equal(same.version,basic.version);
+  await assert.rejects(f.service.review(f.admin.actor,task.id,{...input,unitId:'p1'}),/状态已变化/);
+  let current=basic;
+  for(const unitId of ['p1','p1-5','p2']) current=await f.service.review(f.admin.actor,task.id,{...input,unitId,version:current.version,decision:unitId==='p1-5'?'rejected':'approved'});
+  assert.equal(current.review,'rejected');assert.equal(current.unitReviews['p1-5'].reviewer,f.admin.actor);
+  await assert.rejects(f.service.conversion(f.admin.actor,task.id,{action:'export',version:current.version,digest:task.digest,discard:true}),/审核通过/);
+  const next=f.service.create(f.admin.actor,{url:task.url,...task.options},current);await f.service.jobs.get(next.id);
+  const newer=await f.service.detail(f.admin.actor,next.id);assert.ok(newer.units.every((u:any)=>u.review==='pending'));assert.equal(newer.generation,2);
+ }finally{f.store.close();}
+});
+
+test('旧任务保留整篇审核和原摘要，重新获取才启用分 P',async()=>{
+ const f=await fixture();try{
+  const task=await f.create(),dir=f.service.dir(task.id);
+  const snapshot=JSON.parse(await readFile(path.join(dir,'snapshot.json'),'utf8'));
+  const result=convert(snapshot,task.options,false);
+  const digest=fingerprint({snapshotHash:task.snapshotHash,options:task.options,reader:READER_VERSION,converter:'review-1',result});
+  delete task.reviewMode;delete task.unitReviews;task.digest=digest;
+  f.store.put('task',task.id,task);await writeFile(path.join(dir,'report.json'),JSON.stringify({...result,digest,converter:'review-1'}));
+  const detail=await f.service.detail(f.admin.actor,task.id);assert.equal(detail.units,undefined);
+  const reviewed=await f.service.review(f.admin.actor,task.id,{decision:'approved',comment:'整篇审核',version:task.version,snapshotHash:task.snapshotHash});assert.equal(reviewed.review,'approved');
+  const done=await f.service.conversion(f.admin.actor,task.id,{action:'export',version:reviewed.version,digest,discard:true});assert.equal(done.conversion,'completed');
+ }finally{f.store.close();}
 });

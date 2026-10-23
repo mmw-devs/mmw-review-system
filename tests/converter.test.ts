@@ -135,3 +135,17 @@ test('命令行没有授权不输出，错误摘要拒绝，确认后输出且�
   assert.deepEqual(validateStrategy(JSON.parse(readFileSync(path.join(dir, 'strategy.json'), 'utf8'))), []);
   assert.equal(run('--discard', result.digest).status, 1);
 });
+
+
+test('半阶段独立切分，转场和容器内部标题留在原 P，顺序不重排',()=>{
+ const r=convert(snapshot('<h1 id="a">P1</h1><p>A</p><h2 id="transition">转场</h2><p>转场内容</p><h1 id="b">P1.5阶段</h1><p>B</p><table><tr><td><h1>P9</h1><p>表内正文</p></td></tr></table><h1 id="c">P2</h1><p>C</p>'),options);
+ assert.deepEqual(r.blockers,[]);assert.deepEqual(r.document.phases.map((p:any)=>p.id),['p1','p1-5','p2']);
+ assert.ok(JSON.stringify(r.document.phase_contents[0]).includes('转场内容'));
+ assert.ok(JSON.stringify(r.document.phase_contents[1]).includes('表内正文'));
+ assert.ok(!JSON.stringify(r.document.phase_contents[2]).includes('表内正文'));
+ const legacy=convert(snapshot('<h2>P1·机制A</h2><p>A</p><h2>P1.5·机制B</h2><p>B</p><h2>P1.5·机制C</h2><p>C</p><h2>P2·机制D</h2><p>D</p>'),{...options,profile:'legacy'});
+ assert.deepEqual(legacy.blockers,[]);assert.equal(legacy.document.phases[1].mechanics.length,2);
+ const repeated=convert(snapshot('<h1>P1</h1><p>A</p><h1>P1.5</h1><p>B</p><h1>P2</h1><p>C</p><h1>P1.5</h1><p>D</p>'),options);assert.ok(repeated.blockers.length);
+ const reversed=convert(snapshot('<h1>P2</h1><p>A</p><h1>P1.5</h1><p>B</p>'),options);assert.deepEqual(reversed.document.phases.map((p:any)=>p.id),['p2','p1-5']);
+ const issues=convert(snapshot('<h1>P1.5</h1><p>A</p><unsupported id="u"/>'),options);assert.equal(issues.unsupported[0].unitId,'p1-5');
+});

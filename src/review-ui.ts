@@ -11,13 +11,13 @@ function button(text, fn, parent, secondary=false) { const b=el('button',text); 
 function link(text,url,parent) { const a=el('a',text);a.href=url;a.target='_blank';a.rel='noopener noreferrer';parent.append(a);return a; }
 // 仅保留当前任务的内存数据、已访问页面和草稿，退出或权限失效时一起释放。
 function clearTask(){showRequest++;if(taskCache){taskCache.disposed=true;for(const stop of taskCache.cleanups)stop();}taskCache=undefined;current=undefined;activeId=undefined;activeUnit=undefined;$('task').replaceChildren(el('p','请选择任务或重新授权后读取。'));}
-function permissionError(status,message){return status===401||status===403||/无权访问|审核人员权限|不存在或无权/.test(message);}
+function permissionError(status){return status===401||status===403;}
 function loading(text){const row=el('div');row.className='loading';row.setAttribute('role','status');const spin=el('span');spin.className='spinner';spin.setAttribute('aria-hidden','true');row.append(spin,el('span',text));return row;}
 function mergeTask(update){if(taskCache?.id!==update.id)return;Object.assign(taskCache.data,update);if(taskCache.data.units)for(const u of taskCache.data.units)Object.assign(u,update.unitReviews?.[u.id]||{review:'pending'});}
 async function decide(id,action,input){try{const update=await api('/api/tasks/'+id+'/'+action,input);mergeTask(update);if(activeId===id)await show(id,activeUnit);await list();}catch(e){if(e.status===409&&taskCache?.id===id){taskCache.stale=true;try{await show(id,activeUnit,'replace',true);}catch{}}throw e;}}
 // 图片先正常加载；只有失败才查询接口错误，避免把本地已有图片误认成需丢弃的内容。
 function picture(block){
- const owner=taskCache, taskId=activeId, figure=el('figure'), img=el('img'), status=el('div');status.className='image-status';status.setAttribute('role','status');img.alt='攻略图片';img.hidden=true;
+ const owner=taskCache, taskId=activeId, figure=el('figure'), img=el('img'), status=el('div');status.className='image-status';status.setAttribute('role','status');img.alt='攻略图片';img.loading='lazy';img.decoding='async';img.hidden=true;
  if(block.width)img.width=block.width;if(block.height)img.height=block.height;
  figure.append(img,status);if(block.caption){const caption=el('figcaption');inline(block.caption,caption);figure.append(caption);}
  let attempts=0,timer,sequence=0,controller;const url='/api/tasks/'+taskId+'/assets/'+block.src.split('/').pop();
@@ -33,7 +33,7 @@ function picture(block){
    if(retryable&&attempts<2){attempts++;status.replaceChildren(loading('图片加载失败，正在重试（'+attempts+'/2）……'));timer=setTimeout(start,attempts*700);return;}
    fail(retryable?message:message+'；请刷新任务或重新获取。',retryable);
   };
-  img.onerror=diagnose;timer=setTimeout(diagnose,15000);img.src=url+'?attempt='+sequence;
+  img.onerror=diagnose;img.src=url+'?attempt='+sequence;
  }
  figure.retry=()=>{attempts=0;start();};owner?.cleanups.push(()=>{sequence++;clearTimeout(timer);controller?.abort();img.onload=null;img.onerror=null;img.removeAttribute('src');});start();return figure;
 }

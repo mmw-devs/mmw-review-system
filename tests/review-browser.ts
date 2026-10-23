@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { fixture } from './review-fixture.ts';
+import { AppError } from '../src/review-auth.ts';
 import { createReviewServer } from '../src/review-server.ts';
 
 const browser = process.env.REVIEW_BROWSER;
@@ -12,6 +13,10 @@ if (!browser) throw new Error('请通过 REVIEW_BROWSER 指定已安装浏览器
 const f = await fixture();
 f.state.blocks[0].children.push('half','halfBody','p2','p2Body');
 for(const [id,title] of [['half','P1.5'],['p2','P2']]) f.state.blocks.push({block_id:id,parent_id:'doc',block_type:3,heading1:{elements:[{text_run:{content:title}}]}},{block_id:id+'Body',parent_id:'doc',block_type:2,text:{elements:[{text_run:{content:title+' 独立正文'}}]}});
+let detailRequests=0,imageRequests=0,failImages=true;
+const originalDetail=f.service.detail.bind(f.service),originalImage=f.service.image.bind(f.service);
+f.service.detail=async(...args:Parameters<typeof originalDetail>)=>{detailRequests++;await new Promise(r=>setTimeout(r,250));return originalDetail(...args);};
+f.service.image=async(...args:Parameters<typeof originalImage>)=>{imageRequests++;if(failImages)throw new AppError(503,'图片暂时不可用');return originalImage(...args);};
 const {server} = createReviewServer(f.auth, f.service);
 await new Promise<void>(r => server.listen(0,'127.0.0.1',r)); const address=server.address() as any;f.config.origin='http://127.0.0.1:'+address.port;
 const profile=await mkdtemp(path.join(os.tmpdir(),'mmw-browser-'));
@@ -32,24 +37,33 @@ try{
  await call('Network.setCookie',{name:'mmw_session',value:f.admin.session,url:f.config.origin,httpOnly:true,sameSite:'Lax'});await call('Page.navigate',{url:f.config.origin});await waitFor("document.getElementById('workspace') && !document.getElementById('workspace').hidden");
  await evaluate("document.querySelector('[name=url]').value='https://example.feishu.cn/wiki/wikiNode';document.querySelector('[name=dutyId]').value='demo';document.querySelector('[name=dutyName]').value='测试副本';document.querySelector('[name=profile]').value='standard';document.getElementById('create').requestSubmit();");
  await waitFor("document.getElementById('tasks').querySelectorAll('button').length===1");await waitFor("document.getElementById('task').innerText.includes('读取')");
+ await waitFor("Array.from(document.querySelectorAll('#task button')).some(x=>x.textContent==='刷新任务')");
  await Promise.all([...f.service.jobs.values()]);
  await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='刷新任务').click()");await waitFor("document.querySelector('#task .preview') !== null");assert.ok(await evaluate("document.querySelector('.preview').innerText.includes('副本基本信息')"));
  await evaluate("Array.from(document.querySelectorAll('.phase-nav button')).find(x=>x.textContent.startsWith('P1阶段')).click()");
- await waitFor("document.querySelector('.preview img') && Array.from(document.querySelectorAll('.preview img')).every(x=>x.complete && x.naturalWidth>0)");
+ await waitFor("document.querySelector('figure[data-failed] button') !== null");
+ assert.equal(imageRequests,6); // 三次图片加载及对应诊断请求，随后停止自动重试。
+ assert.ok(await evaluate("!Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='审核通过').disabled"));
+ const beforeRetry=detailRequests;failImages=false;
+ await evaluate("document.querySelector('figure[data-failed] button').click()");
+ await waitFor("document.querySelector('.preview img')?.naturalWidth>0");assert.equal(detailRequests,beforeRetry);
+ const cachedRequests=detailRequests,cachedImageRequests=imageRequests;
+ await evaluate("document.querySelector('#task textarea').value='保留的草稿';document.querySelector('#task textarea').dispatchEvent(new Event('input'))");
  assert.ok(await evaluate("document.querySelector('.preview').innerText.includes('分摊后分散')"));
  assert.ok(!(await evaluate("document.querySelector('.preview').innerText.includes('P1.5 独立正文')")));
  await evaluate("Array.from(document.querySelectorAll('.phase-nav button')).find(x=>x.textContent.startsWith('P1.5')).click()");await waitFor("document.querySelector('.preview')?.innerText.includes('P1.5 独立正文')");
  assert.ok(!(await evaluate("document.querySelector('.preview').innerText.includes('分摊后分散')")));
- await call('Page.reload');await waitFor("document.querySelector('.preview')?.innerText.includes('P1.5 独立正文')");
+ await evaluate("Array.from(document.querySelectorAll('.phase-nav button')).find(x=>x.textContent.startsWith('P1阶段')).click()");await waitFor("document.querySelector('.preview img')?.naturalWidth>0");
+ assert.equal(await evaluate("document.querySelector('#task textarea').value"),'保留的草稿');assert.equal(detailRequests,cachedRequests);assert.equal(imageRequests,cachedImageRequests);
+ await evaluate("Array.from(document.querySelectorAll('.phase-nav button')).find(x=>x.textContent.startsWith('P1.5')).click()");
+ await call('Page.reload');await waitFor("document.querySelector('.loading') !== null");await waitFor("document.querySelector('.preview')?.innerText.includes('P1.5 独立正文')");
  await evaluate('history.back()');await waitFor("document.querySelector('.preview')?.innerText.includes('分摊后分散')");
  await evaluate('history.forward()');await waitFor("document.querySelector('.preview')?.innerText.includes('P1.5 独立正文')");
- for(const label of ['副本基本信息','P1阶段','P1.5','P2']){
-  await evaluate("Array.from(document.querySelectorAll('.phase-nav button')).find(x=>x.textContent.startsWith("+JSON.stringify(label)+")).click()");
-  await waitFor("document.querySelector('.phase-nav [aria-current=page]')?.textContent.startsWith("+JSON.stringify(label)+")");
-  await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='审核通过').click()");
-  await waitFor("document.querySelector('.phase-nav [aria-current=page]')?.textContent.includes('已通过')");
-  if(label!=='P2')assert.equal(await evaluate("document.querySelector('.confirm input')"),null);
- }
+ const beforeReview=detailRequests;
+ await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='审核通过').click()");
+ await waitFor("document.querySelector('.phase-nav [aria-current=page]')?.textContent.includes('已通过')");assert.equal(detailRequests,beforeReview);
+ assert.ok(await evaluate("document.querySelector('.phase-nav').innerText.includes('副本基本信息 · 待审核')"));
+ assert.ok(await evaluate("document.querySelector('.actions').innerText.includes('完整导出包含未通过部分')"));
  await waitFor("document.querySelector('.confirm input') !== null");
  await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='转换并保存 JSON').click()");await waitFor("document.getElementById('notice').textContent.includes('明确确认')");
  await evaluate("document.querySelector('.confirm input').checked=true;Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='转换并保存 JSON').click()");await waitFor("document.querySelector('#task a[href$=export]') !== null");
@@ -61,5 +75,10 @@ try{
  await evaluate("Array.from(document.querySelectorAll('.phase-nav button')).find(x=>x.textContent.startsWith('P1.5')).click()");await waitFor("document.querySelector('.preview')?.innerText.includes('P1.5 独立正文')");
  await evaluate("document.getElementById('task').scrollIntoView()");await sleep(200);assert.ok(await evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'));
  const mobile=await call('Page.captureScreenshot',{format:'png'});await writeFile(path.join(repo,'data','ui-check','review-mobile.png'),Buffer.from(mobile.data,'base64'));
- assert.deepEqual(errors,[]);console.log('浏览器验收通过：登录页、任务提交、分 P 切换、刷新定位、前进后退、图片正文、逐页审核、排除确认、导出入口、移动端布局；使用模拟飞书服务');
+ const beforeRefresh=detailRequests;
+ await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='刷新任务').click()");
+ await waitFor("document.querySelector('.loading') !== null");assert.ok(await evaluate("document.querySelector('.preview') !== null"));await waitFor("document.querySelector('.loading') === null");assert.equal(detailRequests,beforeRefresh+1);
+ f.state.denied=true;
+ await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='刷新任务').click()");await waitFor("document.querySelector('.preview') === null && document.getElementById('notice').innerText.includes('无权访问')");
+ assert.deepEqual(errors,[]);console.log('浏览器验收通过：登录页、任务提交、分 P 缓存命中、草稿保留、加载动画、刷新定位、前进后退、图片失败与重试、单 P 审核导出、权限失效清理、排除确认、导出入口、移动端布局；使用模拟飞书服务');
 }finally{ws?.close();proc.kill();await new Promise<void>(r=>server.close(()=>r()));f.store.close();}

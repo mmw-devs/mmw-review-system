@@ -126,7 +126,7 @@ test('跨主机跳转被禁止且凭证不会出现在接口错误中',async()=>
 });
 
 
-test('分 P 审核拒绝漏页、未知页和过期决定，驳回阻断导出，新版本全部重审',async()=>{
+test('分 P 审核校验未知页和过期决定，单 P 通过可导出完整攻略并继续审核',async()=>{
  const f=await fixture();try{
   const root=f.state.blocks[0];root.children.push('half','halfBody','p2','p2Body');
   for(const [id,title] of [['half','P1.5'],['p2','P2']]) f.state.blocks.push({block_id:id,parent_id:'doc',block_type:3,heading1:{elements:[{text_run:{content:title}}]}},{block_id:id+'Body',parent_id:'doc',block_type:2,text:{elements:[{text_run:{content:title+' 正文'}}]}});
@@ -139,10 +139,16 @@ test('分 P 审核拒绝漏页、未知页和过期决定，驳回阻断导出�
   const basic=await f.service.review(f.admin.actor,task.id,{...input,unitId:'basic'});
   const same=await f.service.review(f.admin.actor,task.id,{...input,unitId:'basic'});assert.equal(same.version,basic.version);
   await assert.rejects(f.service.review(f.admin.actor,task.id,{...input,unitId:'p1'}),/状态已变化/);
-  let current=basic;
-  for(const unitId of ['p1','p1-5','p2']) current=await f.service.review(f.admin.actor,task.id,{...input,unitId,version:current.version,decision:unitId==='p1-5'?'rejected':'approved'});
+  let current=await f.service.review(f.admin.actor,task.id,{...input,unitId:'p1-5',version:basic.version,decision:'rejected'});
+  await assert.rejects(f.service.conversion(f.admin.actor,task.id,{action:'export',version:current.version,digest:task.digest,discard:true}),/至少一个 P/);
+  current=await f.service.review(f.admin.actor,task.id,{...input,unitId:'p1',version:current.version});
   assert.equal(current.review,'rejected');assert.equal(current.unitReviews['p1-5'].reviewer,f.admin.actor);
-  await assert.rejects(f.service.conversion(f.admin.actor,task.id,{action:'export',version:current.version,digest:task.digest,discard:true}),/审核通过/);
+  const done=await f.service.conversion(f.admin.actor,task.id,{action:'export',version:current.version,digest:task.digest,discard:true});
+  assert.equal(done.conversion,'completed');assert.equal(done.review,'rejected');assert.equal(done.unitReviews.p2,undefined);
+  const json=JSON.parse(await readFile(path.join(f.service.dir(task.id),'strategy.json'),'utf8'));
+  assert.deepEqual(json.phases.map((p:any)=>p.id),['p1','p1-5','p2']);
+  assert.ok((await f.service.export(f.admin.actor,task.id)).length>512);
+  current=await f.service.review(f.admin.actor,task.id,{...input,unitId:'p2',version:done.version});assert.equal(current.unitReviews.p2.review,'approved');
   const next=f.service.create(f.admin.actor,{url:task.url,...task.options},current);await f.service.jobs.get(next.id);
   const newer=await f.service.detail(f.admin.actor,next.id);assert.ok(newer.units.every((u:any)=>u.review==='pending'));assert.equal(newer.generation,2);
  }finally{f.store.close();}

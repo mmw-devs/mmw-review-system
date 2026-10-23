@@ -17,14 +17,14 @@ function mergeTask(update){if(taskCache?.id!==update.id)return;Object.assign(tas
 async function decide(id,action,input){try{const update=await api('/api/tasks/'+id+'/'+action,input);mergeTask(update);if(activeId===id)await show(id,activeUnit);await list();}catch(e){if(e.status===409&&taskCache?.id===id){taskCache.stale=true;try{await show(id,activeUnit,'replace',true);}catch{}}throw e;}}
 // 图片先正常加载；只有失败才查询接口错误，避免把本地已有图片误认成需丢弃的内容。
 function picture(block){
- const owner=taskCache, taskId=activeId, figure=el('figure'), img=el('img'), status=el('div');status.className='image-status';status.setAttribute('role','status');img.alt='攻略图片';img.loading='lazy';img.decoding='async';img.hidden=true;
- if(block.width)img.width=block.width;if(block.height)img.height=block.height;
+ const owner=taskCache, taskId=activeId, figure=el('figure'), img=el('img'), status=el('div');status.className='image-status';status.setAttribute('role','status');img.alt='攻略图片';img.decoding='async';img.style.opacity='0';
+ if(block.width)img.width=block.width;if(block.height)img.height=block.height;img.loading=(block.width&&block.height)?'lazy':'eager';
  figure.append(img,status);if(block.caption){const caption=el('figcaption');inline(block.caption,caption);figure.append(caption);}
  let attempts=0,timer,sequence=0,controller;const url='/api/tasks/'+taskId+'/assets/'+block.src.split('/').pop();
  const alive=()=>!owner?.disposed;
  const fail=(message,retryable)=>{if(!alive())return;status.className='image-status image-error';status.replaceChildren(el('span',message));figure.dataset.failed='true';if(retryable)button('重试图片',()=>{attempts=0;start();},status,true);};
- function start(){if(!alive())return;clearTimeout(timer);controller?.abort();const turn=++sequence;delete figure.dataset.failed;img.hidden=true;status.hidden=false;status.className='image-status';status.replaceChildren(loading('图片加载中……'));
-  img.onload=()=>{if(!alive()||turn!==sequence)return;clearTimeout(timer);img.hidden=false;status.hidden=true;delete figure.dataset.failed;};
+ function start(){if(!alive())return;clearTimeout(timer);controller?.abort();const turn=++sequence;delete figure.dataset.failed;img.style.opacity='0';status.hidden=false;status.className='image-status';status.replaceChildren(loading('图片加载中……'));
+  img.onload=()=>{if(!alive()||turn!==sequence)return;clearTimeout(timer);img.style.opacity='1';status.hidden=true;delete figure.dataset.failed;};
   const diagnose=async()=>{if(!alive()||turn!==sequence)return;clearTimeout(timer);img.onload=null;img.onerror=null;controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),10000);let code=0,message='图片加载失败，请重试';
    try{const response=await fetch(url,{signal:controller.signal});code=response.status;if(!response.ok){const result=await response.json().catch(()=>({}));message=result.error||message;}else{message='图片暂时无法显示，请重试';await response.body?.cancel();}}catch{message='图片网络请求失败，请重试';}finally{clearTimeout(timeout);}
    if(!alive()||turn!==sequence)return;

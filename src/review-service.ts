@@ -20,6 +20,33 @@ function canExport(task: any, document: any) {
     ? document.phases.some((p: any) => task.unitReviews?.[p.id]?.review === 'approved' && task.unitReviews[p.id].digest === task.digest)
     : task.review === 'approved';
 }
+export type ActionState = { allowed: boolean; reason?: string };
+type TaskActions = { review: Record<string, ActionState>; export: ActionState; cancel: ActionState; download: ActionState };
+// 任务和转换结果是动作规则的唯一输入；返回值仅供响应与执行校验，不另行持久化。
+function taskActions(task: any, result?: any): TaskActions {
+  const denied = (reason: string): ActionState => ({ allowed: false, reason });
+  if (task.reading !== 'ready' || !result) {
+    const unavailable = denied('读取尚未就绪');
+    return { review: {}, export: unavailable, cancel: unavailable, download: unavailable };
+  }
+  const units = task.reviewMode === 'phases' ? reviewUnits(result.document) : [{ id: 'whole' }];
+  const review = Object.fromEntries(units.map((unit: any) => {
+    const decided = task.reviewMode === 'phases' ? !!task.unitReviews?.[unit.id] : task.review !== 'pending';
+    return [unit.id, task.conversion === 'cancelled' ? denied('此版本已取消转换；请重新获取后再审核')
+      : decided ? denied('审核状态已变化，请刷新；修改原文请重新获取') : { allowed: true }];
+  }));
+  const approved = canExport(task, result.document);
+  const conversion = !approved ? denied('需要先人工审核通过至少一个 P；旧任务仍需整篇通过')
+    : ['completed', 'cancelled'].includes(task.conversion) ? denied('此版本已完成或取消；请重新获取后再转换') : { allowed: true };
+  return {
+    review,
+    export: conversion.allowed && result.blockers.length ? denied('仍有阻断问题，请修正原文并重新获取') : conversion,
+    cancel: conversion,
+    download: task.conversion === 'completed' && approved ? { allowed: true } : denied('暂无正式产物'),
+  };
+}
+function taskResponse(task: any, result?: any) { return { ...task, actions: taskActions(task, result) }; }
+function requireAction(action: ActionState) { if (!action.allowed) throw new AppError(409, action.reason ?? '当前任务不允许此操作'); }
 export class ReviewService {
   auth: Auth; apiFactory: (actor: string, check: () => void) => FeishuApi;
   jobs = new Map<string, Promise<void>>(); busy = new Set<string>();
@@ -95,9 +122,9 @@ export class ReviewService {
   }
   async detail(actor: string, id: string) {
     const task = this.task(actor, id);
-    if (task.reading !== 'ready') return { id, version: task.version, reading: task.reading, review: task.review, conversion: task.conversion, error: task.error };
+    if (task.reading !== 'ready') return { id, version: task.version, reading: task.reading, review: task.review, conversion: task.conversion, error: task.error, actions: taskActions(task) };
     const value = await this.checked(actor, id);
-    return { ...task, snapshotRevision: value.snapshot.revision, title: value.snapshot.title, result: value.result, ...(task.reviewMode === 'phases' ? { units: reviewUnits(value.result.document).map((u: any) => ({ ...u, ...(task.unitReviews?.[u.id] ?? { review: 'pending' }) })) } : {}) };
+    return { ...taskResponse(task, value.result), snapshotRevision: value.snapshot.revision, title: value.snapshot.title, result: value.result, ...(task.reviewMode === 'phases' ? { units: reviewUnits(value.result.document).map((u: any) => ({ ...u, ...(task.unitReviews?.[u.id] ?? { review: 'pending' }) })) } : {}) };
   }
   async locked<T>(id: string, action: () => Promise<T>): Promise<T> { if (this.busy.has(id)) throw new AppError(409, '此任务正在处理，请稍后刷新'); this.busy.add(id); try { return await action(); } finally { this.busy.delete(id); } }
   async review(actor: string, id: string, input: any) {
@@ -110,19 +137,21 @@ export class ReviewService {
         if (!units.some((u: any) => u.id === input.unitId)) throw new AppError(400, '审核页面不存在，请选择副本基本信息或一个 P');
         if (input.digest !== task.digest) throw new AppError(409, '切分内容或转换规则已变化，请刷新');
         const previous = task.unitReviews?.[input.unitId];
-        if (previous?.review === input.decision && previous.comment === input.comment) return task;
-        if (task.version !== input.version || previous || task.conversion === 'cancelled') throw new AppError(409, '审核状态已变化，请刷新；修改原文请重新获取');
+        if (previous?.review === input.decision && previous.comment === input.comment) return taskResponse(task, result);
+        if (task.version !== input.version) throw new AppError(409, '审核状态已变化，请刷新；修改原文请重新获取');
+        requireAction(taskActions(task, result).review[input.unitId]);
         check();
         task.unitReviews = { ...task.unitReviews, [input.unitId]: { review: input.decision, comment: input.comment, reviewer: actor, reviewedAt: new Date().toISOString(), digest: task.digest, snapshotHash: task.snapshotHash } };
         task.review = units.some((u: any) => task.unitReviews[u.id]?.review === 'rejected') ? 'rejected' : units.every((u: any) => task.unitReviews[u.id]?.review === 'approved') ? 'approved' : 'pending';
         task.version++;
         this.auth.store.transaction(() => { this.auth.store.put('task', id, task); this.auth.store.audit(actor, 'review-' + input.decision, id, { unitId: input.unitId, snapshotHash: task.snapshotHash, digest: task.digest }); });
-        return task;
+        return taskResponse(task, result);
       }
-      if (task.review === input.decision && task.comment === input.comment) return task;
-      if (task.version !== input.version || task.review !== 'pending') throw new AppError(409, '审核状态已变化，请刷新；修改原文请重新获取');
+      if (task.review === input.decision && task.comment === input.comment) return taskResponse(task, result);
+      if (task.version !== input.version) throw new AppError(409, '审核状态已变化，请刷新；修改原文请重新获取');
+      requireAction(taskActions(task, result).review.whole);
       check(); task.review = input.decision; task.comment = input.comment; task.reviewedAt = new Date().toISOString(); task.version++;
-      this.auth.store.transaction(() => { this.auth.store.put('task', id, task); this.auth.store.audit(actor, 'review-' + input.decision, id, { snapshotHash: task.snapshotHash }); }); return task;
+      this.auth.store.transaction(() => { this.auth.store.put('task', id, task); this.auth.store.audit(actor, 'review-' + input.decision, id, { snapshotHash: task.snapshotHash }); }); return taskResponse(task, result);
     });
   }
   async conversion(actor: string, id: string, input: any) {
@@ -130,11 +159,13 @@ export class ReviewService {
       const { task, result, check } = await this.checked(actor, id);
       if (!canExport(task, result.document)) throw new AppError(409, '需要先人工审核通过至少一个 P；旧任务仍需整篇通过');
       if (input.digest !== task.digest) throw new AppError(409, '排除清单或转换规则已变化，请刷新');
-      if (task.conversion === 'completed' && input.action === 'export') return task;
-      if (task.conversion === 'cancelled' && input.action === 'cancel') return task;
-      if (task.version !== input.version || ['completed', 'cancelled'].includes(task.conversion)) throw new AppError(409, '此版本已完成或取消；请重新获取后再转换');
+      if (task.conversion === 'completed' && input.action === 'export') return taskResponse(task, result);
+      if (task.conversion === 'cancelled' && input.action === 'cancel') return taskResponse(task, result);
+      if (task.version !== input.version) throw new AppError(409, '此版本已完成或取消；请重新获取后再转换');
       if (!['cancel', 'export'].includes(input.action)) throw new AppError(400, '转换操作无效');
-      if (input.action === 'export' && (result.blockers.length || (result.unsupported.length && input.discard !== true))) throw new AppError(409, '仍有阻断问题或未明确确认排除清单');
+      const actions = taskActions(task, result);
+      requireAction(input.action === 'export' ? actions.export : actions.cancel);
+      if (input.action === 'export' && result.unsupported.length && input.discard !== true) throw new AppError(409, '未明确确认排除清单');
       check();
       if (input.action === 'export') {
         const bytes = Buffer.from(JSON.stringify(result.document, null, 2) + '\n');
@@ -146,7 +177,7 @@ export class ReviewService {
           this.auth.store.put('task', id, task); this.auth.store.audit(actor, 'export', id, { digest: task.digest, artifactHash: task.artifactHash, discarded: task.discard });
         });
       } else { task.conversion = 'cancelled'; task.version++; this.auth.store.put('task', id, task); this.auth.store.audit(actor, 'conversion-cancel', id); }
-      return task;
+      return taskResponse(task, result);
     });
   }
   async image(actor: string, id: string, name: string) {
@@ -165,7 +196,7 @@ export class ReviewService {
   }
   async export(actor: string, id: string) {
     const { task, result, snapshot, check } = await this.checked(actor, id);
-    if (task.conversion !== 'completed' || !canExport(task, result.document)) throw new AppError(409, '暂无正式产物');
+    requireAction(taskActions(task, result).download);
     const json = await readFile(path.join(this.dir(id), 'strategy.json')); if (hash(json) !== task.artifactHash) throw new AppError(409, '正式产物已变化');
     const names = new Set<string>(); const walk = (v: any) => { if (!v || typeof v !== 'object') return; if (v.type === 'image' && typeof v.src === 'string') names.add(v.src); Object.values(v).forEach(walk); }; walk(result.document);
     const entries = [{ name: 'strategy.json', bytes: json }];

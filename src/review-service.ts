@@ -6,6 +6,8 @@ import { FeishuApi, ApiError, READER_VERSION } from './feishu-api.ts';
 import type { ApiSnapshot } from './feishu-api.ts';
 import { convert, fingerprint } from './converter.ts';
 import type { Options } from './converter.ts';
+import { publishContent, readContent, fileStamp } from './review-content.ts';
+import type { ContentIndex } from './review-content.ts';
 import { documentUrl } from './feishu.ts';
 
 const CONVERTER_VERSION = 'review-2';
@@ -49,6 +51,8 @@ function taskResponse(task: any, result?: any) { return { ...task, actions: task
 function requireAction(action: ActionState) { if (!action.allowed) throw new AppError(409, action.reason ?? '当前任务不允许此操作'); }
 export class ReviewService {
   auth: Auth; apiFactory: (actor: string, check: () => void) => FeishuApi;
+  priorities = new Map<string, Set<string>>();
+  contentJobs = new Map<string, Promise<ContentIndex>>();
   jobs = new Map<string, Promise<void>>(); busy = new Set<string>();
   constructor(auth: Auth, apiFactory?: (actor: string, check: () => void) => FeishuApi) {
     this.auth = auth; this.apiFactory = apiFactory ?? ((actor, check) => new FeishuApi(() => auth.token(actor), auth.fetcher, check));
@@ -72,7 +76,7 @@ export class ReviewService {
     const options: Options = { dutyId: input.dutyId, dutyName: input.dutyName.trim(), profile: input.profile ?? 'legacy', ...(input.dutyType ? { dutyType: input.dutyType } : {}) };
     const id = random(), task = { id, owner: actor, url, options, version: 1, generation: parent ? parent.generation + 1 : 1, parent: parent?.id, created: new Date().toISOString(), reading: 'queued', reviewMode: 'phases', unitReviews: {}, review: 'pending', conversion: 'not_started' };
     this.auth.store.put('task', id, task); this.auth.store.audit(actor, 'task-create', id);
-    const job = this.read(actor, id, m.version).finally(() => this.jobs.delete(id)); this.jobs.set(id, job);
+    const job = this.read(actor, id, m.version).finally(() => { this.jobs.delete(id); this.priorities.delete(id); }); this.jobs.set(id, job);
     return task;
   }
   async read(actor: string, id: string, memberVersion: number) {
@@ -80,13 +84,24 @@ export class ReviewService {
     try {
       const check = () => this.checkpoint(actor, memberVersion); check(); task.reading = 'reading'; store.put('task', id, task);
       const dir = this.dir(id); await mkdir(dir, { recursive: true, mode: 0o700 });
-      const snapshot = await this.apiFactory(actor, check).read(task.url, dir); check();
+      const snapshot = await this.apiFactory(actor, check).read(task.url, dir, {
+        priority: () => this.priorities.get(id) ?? new Set(),
+        publish: async partial => {
+          check();
+          const result = convert(partial, task.options, true, true);
+          const index = await publishContent(dir, partial, result, this.contentIdentity(task), false, true);
+          check(); store.put('content', id, index);
+          task.progress = { pages: partial.completeness.pages, blocks: partial.completeness.blocks, images: Object.keys(partial.images).length };
+          store.put('task', id, task);
+        },
+      }); check();
       const result = convert(snapshot, task.options, task.reviewMode === 'phases'); const snapshotHash = fingerprint(snapshot);
       const consent = fingerprint({ snapshotHash, options: task.options, reader: READER_VERSION, converter: converterVersion(task), result });
       await writeFile(path.join(dir, 'candidate.json'), JSON.stringify(result.document, null, 2), { flag: 'wx', mode: 0o600 });
       await writeFile(path.join(dir, 'report.json'), JSON.stringify({ ...result, digest: consent, snapshotHash, converter: converterVersion(task) }, null, 2), { flag: 'wx', mode: 0o600 });
       check(); task = { ...task, reading: 'ready', snapshotHash, digest: consent, conversion: result.unsupported.length ? 'needs_confirmation' : 'not_started', version: task.version + 1 };
-      store.put('task', id, task);
+      const index = await publishContent(dir, snapshot, result, this.contentIdentity(task), true, task.reviewMode === 'phases');
+      check(); store.put('content', id, index); store.put('task', id, task);
     } catch (e) {
       if (e instanceof ApiError && e.kind === 'authorization') this.auth.store.remove('credential', actor);
       task.reading = (e instanceof AppError && e.status === 401) || (e instanceof ApiError && ['authorization', 'scope'].includes(e.kind)) ? 'waiting_authorization' : 'failed';
@@ -120,11 +135,61 @@ export class ReviewService {
     await this.apiFactory(actor, check).check(files.snapshot); check();
     return { task, ...files, check };
   }
+  contentIdentity(task: any) { return fingerprint({ snapshotHash: task.snapshotHash, digest: task.digest, options: task.options, reader: READER_VERSION, converter: converterVersion(task) }); }
+  async content(actor: string, id: string) {
+    const task = this.task(actor, id); this.checkpoint(actor);
+    if (!['ready', 'reading'].includes(task.reading)) throw new AppError(409, '读取尚未就绪');
+    let index: ContentIndex = this.auth.store.get('content', id);
+    // 旧任务首次访问时生成分页索引，不覆盖原快照或改变原审核摘要。
+    if (task.reading === 'ready' && (!index?.final || index.identity !== this.contentIdentity(task))) {
+      let job = this.contentJobs.get(id);
+      if (!job) {
+        job = (async () => {
+          const files = await this.files(task, false);
+          const value = await publishContent(this.dir(id), files.snapshot, files.result, this.contentIdentity(task), true, task.reviewMode === 'phases');
+          this.checkpoint(actor); this.auth.store.put('content', id, value); return value;
+        })().finally(() => this.contentJobs.delete(id));
+        this.contentJobs.set(id, job);
+      }
+      index = await job;
+    }
+    if (!index) return { task, index: undefined, check: () => this.checkpoint(actor) };
+    if (index.final) {
+      const stamps = await Promise.all(['snapshot.json', 'report.json'].map(name => fileStamp(path.join(this.dir(id), name))));
+      if (JSON.stringify(stamps) !== JSON.stringify(index.anchors)) throw new AppError(409, '快照已变化，请重新获取并审核');
+    }
+    const memberVersion = this.auth.reviewer(actor).version;
+    const check = () => {
+      this.checkpoint(actor, memberVersion);
+      const current = this.task(actor, id);
+      if (current.version !== task.version || current.reading !== task.reading) throw new AppError(409, '任务状态已变化，请刷新');
+    };
+    await this.apiFactory(actor, check).check(index.source as ApiSnapshot); check();
+    return { task, index, check };
+  }
   async detail(actor: string, id: string) {
     const task = this.task(actor, id);
-    if (task.reading !== 'ready') return { id, version: task.version, reading: task.reading, review: task.review, conversion: task.conversion, error: task.error, actions: taskActions(task) };
-    const value = await this.checked(actor, id);
-    return { ...taskResponse(task, value.result), snapshotRevision: value.snapshot.revision, title: value.snapshot.title, result: value.result, ...(task.reviewMode === 'phases' ? { units: reviewUnits(value.result.document).map((u: any) => ({ ...u, ...(task.unitReviews?.[u.id] ?? { review: 'pending' }) })) } : {}) };
+    if (!['ready', 'reading'].includes(task.reading)) return { id, version: task.version, reading: task.reading, review: task.review, conversion: task.conversion, error: task.error, actions: taskActions(task) };
+    const value = await this.content(actor, id), index = value.index;
+    if (!index) return { ...taskResponse(task), progress: task.progress };
+    const result = { document: { phases: index.units.filter(u => !['basic', 'whole'].includes(u.id)) }, blockers: index.counts.blockers ? [true] : [] };
+    return { ...taskResponse(task, index.final ? result : undefined), title: index.title, snapshotRevision: index.revision, contentFinal: index.final, issueCounts: index.counts,
+      ...(task.reviewMode === 'phases' ? { units: index.units.map(u => ({ id: u.id, title: u.title, hash: u.hash, imagesPending: u.pending.length, ...(task.unitReviews?.[u.id] ?? { review: 'pending' }) })) } : {}) };
+  }
+  async unit(actor: string, id: string, unitId: string) {
+    const { task, index, check } = await this.content(actor, id);
+    const entry = index?.units.find(u => u.id === unitId);
+    if (!entry) throw new AppError(409, '此页尚未读取完整，请稍候');
+    if (!index!.final) this.priorities.set(id, new Set(entry.pending));
+    const value = await readContent(path.join(this.dir(id), 'units'), entry.hash);
+    check();
+    return { ...value, hash: entry.hash, final: index!.final };
+  }
+  async issues(actor: string, id: string) {
+    const { index, check } = await this.content(actor, id);
+    if (!index?.final) throw new AppError(409, '整篇问题清单尚未就绪');
+    const result = await readContent(path.join(this.dir(id), 'units'), index.report);
+    check(); return result;
   }
   async locked<T>(id: string, action: () => Promise<T>): Promise<T> { if (this.busy.has(id)) throw new AppError(409, '此任务正在处理，请稍后刷新'); this.busy.add(id); try { return await action(); } finally { this.busy.delete(id); } }
   async review(actor: string, id: string, input: any) {
@@ -181,17 +246,12 @@ export class ReviewService {
     });
   }
   async image(actor: string, id: string, name: string) {
-    const task = this.task(actor, id);
-    if (task.reading !== 'ready') throw new AppError(409, '读取尚未就绪');
-    let snapshot: any;
-    try { snapshot = JSON.parse(await readFile(path.join(this.dir(id), 'snapshot.json'), 'utf8')); }
-    catch { throw new AppError(409, '任务快照不完整，请重新获取'); }
-    if (snapshot.snapshot_version !== 2 || fingerprint(snapshot) !== task.snapshotHash) throw new AppError(409, '快照已变化，请重新获取');
-    const src = `assets/${name}`;
-    const image = Object.values(snapshot.images).find((i: any) => i.src === src);
-    if (!image) throw new AppError(404, '图片不存在');
+    const { task, index, check } = await this.content(actor, id);
+    const src = `assets/${name}`, image = index?.assets[src];
+    if (!image) throw new AppError(404, '图片不存在或尚未就绪');
     const bytes = await this.assetFile(task, src);
     if (hash(bytes) !== image.sha256) throw new AppError(409, '图片已变化，请重新获取');
+    check();
     return bytes;
   }
   async export(actor: string, id: string) {

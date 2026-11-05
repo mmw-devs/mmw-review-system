@@ -6,11 +6,11 @@ const $ = id => document.getElementById(id);
 const notice = text => { $('notice').textContent = text; };
 const el = (tag, text) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; return e; };
 const states = {queued:'排队中',reading:'读取中',ready:'读取就绪',waiting_authorization:'等待授权',failed:'失败',pending:'待审核',approved:'已通过',rejected:'已驳回',not_started:'尚未导出',needs_confirmation:'需要确认排除项',running:'转换中',completed:'已导出',cancelled:'已取消'};
-async function api(url, data, method) { try { const response = await fetch(url, {method:method || (data ? 'POST':'GET'), headers:data ? {'Content-Type':'application/json','X-CSRF-Token':me?.csrf || ''}:{}, body:data ? JSON.stringify(data):undefined}); const result = await response.json(); if (!response.ok) {const error=new Error(result.error || '操作失败');error.status=response.status;error.code=result.code;if(result.clearTask===true){clearTask();notice(error.message);}throw error;} return result; }catch(e){if(e.status)throw e;throw new Error('网络请求失败，请刷新核对状态后重试');} }
+async function api(url, data, method, signal) { try { const response = await fetch(url, {signal, method:method || (data ? 'POST':'GET'), headers:data ? {'Content-Type':'application/json','X-CSRF-Token':me?.csrf || ''}:{}, body:data ? JSON.stringify(data):undefined}); const result = await response.json(); if (!response.ok) {const error=new Error(result.error || '操作失败');error.status=response.status;error.code=result.code;if(result.clearTask===true){clearTask();notice(error.message);}throw error;} return result; }catch(e){if(e.status||e.name==='AbortError')throw e;throw new Error('网络请求失败，请刷新核对状态后重试');} }
 function button(text, fn, parent, secondary=false) { const b=el('button',text); b.type='button'; if(secondary)b.className='secondary'; b.onclick=async()=>{b.disabled=true;try{notice('');await fn();}catch(e){notice(e.message);}finally{b.disabled=false;}};parent.append(b);return b; }
 function link(text,url,parent) { const a=el('a',text);a.href=url;a.target='_blank';a.rel='noopener noreferrer';parent.append(a);return a; }
 // 仅保留当前任务的内存数据、已访问页面和草稿，退出或权限失效时一起释放。
-function clearTask(){showRequest++;if(taskCache){taskCache.disposed=true;for(const stop of taskCache.cleanups)stop();}taskCache=undefined;current=undefined;activeId=undefined;activeUnit=undefined;$('task').replaceChildren(el('p','请选择任务或重新授权后读取。'));}
+function clearTask(){showRequest++;if(taskCache){taskCache.disposed=true;clearTimeout(taskCache.poll);taskCache.controller?.abort();for(const stop of taskCache.cleanups)stop();}taskCache=undefined;current=undefined;activeId=undefined;activeUnit=undefined;$('task').replaceChildren(el('p','请选择任务或重新授权后读取。'));}
 function loading(text){const row=el('div');row.className='loading';row.setAttribute('role','status');const spin=el('span');spin.className='spinner';spin.setAttribute('aria-hidden','true');row.append(spin,el('span',text));return row;}
 function mergeTask(update){if(taskCache?.id!==update.id)return;Object.assign(taskCache.data,update);if(taskCache.data.units)for(const u of taskCache.data.units)Object.assign(u,update.unitReviews?.[u.id]||{review:'pending'});}
 async function decide(id,action,input){try{const update=await api('/api/tasks/'+id+'/'+action,input);mergeTask(update);if(activeId===id)await show(id,activeUnit);await list();}catch(e){if(e.status===409&&taskCache?.id===id){taskCache.stale=true;try{await show(id,activeUnit,'replace',true);}catch{}}throw e;}}
@@ -41,6 +41,7 @@ function inline(parts,parent) { for(const p of parts || []) { if(p.type==='hard_
 function body(blocks,parent) { for(const b of blocks || []) {let n;
  if(b.type==='paragraph'||b.type==='heading'){n=el(b.type==='heading'?'h'+Math.min(6,b.level):'p');inline(b.content,n);if(['left','right','center','justify'].includes(b.align))n.style.textAlign=b.align;}
  else if(b.type==='image'){n=picture(b);}
+ else if(b.type==='image_pending'){n=loading('图片正在导入……');}
  else if(b.type==='code'){n=el('pre');n.append(el('code',b.text));}
  else if(b.type==='divider')n=el('hr');
  else if(b.type==='list'){n=el(b.ordered?'ol':'ul');if(b.start)n.start=b.start;for(const item of b.items){const li=el('li');body(item,li);n.append(li);}}
@@ -53,32 +54,60 @@ function preview(doc,parent,unitId) { if(!unitId||unitId==='basic'){parent.appen
 async function list(){const tasks=await api('/api/tasks');$('tasks').replaceChildren();for(const t of tasks)button('第 '+t.generation+' 版 · '+states[t.reading]+' / '+states[t.review],()=>show(t.id),$('tasks'));}
 async function show(id,unitId,historyMode='replace',force=false){
  if(taskCache?.id===activeId&&activeUnit)taskCache.scroll.set(activeUnit,window.scrollY);
- if(taskCache?.id!==id){clearTask();taskCache={id,data:null,views:new Map(),drafts:new Map(),scroll:new Map(),cleanups:[],disposed:false};}
- const cache=taskCache,request=++showRequest;activeId=id;
+ if(taskCache?.id!==id){clearTask();taskCache={id,data:null,views:new Map(),drafts:new Map(),scroll:new Map(),cleanups:[],viewCleanups:new Map(),hashes:new Map(),disposed:false};}
+ const cache=taskCache,request=++showRequest;activeId=id;clearTimeout(cache.poll);cache.controller?.abort();cache.controller=new AbortController();
+ const signal=cache.controller.signal;
+ const poll=()=>{if(!cache.disposed&&['queued','reading'].includes(cache.data?.reading))cache.poll=setTimeout(()=>{if(taskCache===cache)show(id,activeUnit||unitId,'replace',true).catch(e=>notice(e.message));},2000);};
+ const addressEarly=new URL(location.href);addressEarly.searchParams.set('task',id);if(historyMode!=='none'&&new URL(location.href).searchParams.get('task')!==id)history.replaceState({},'',addressEarly);
+ const dropView=key=>{const stops=cache.viewCleanups.get(key)||[];for(const stop of stops)stop();cache.cleanups=cache.cleanups.filter(stop=>!stops.includes(stop));cache.viewCleanups.delete(key);cache.views.delete(key);cache.hashes.delete(key);};
+ if(activeUnit&&activeUnit!==unitId&&cache.views.get(activeUnit)?.querySelector('.image-status:not([hidden])'))dropView(activeUnit);
  if(force||!cache.data||cache.data.reading!=='ready'){
   const indicator=loading(cache.data?'正在更新任务……':'正在核对权限并读取任务……');
   if(cache.data)$('task').prepend(indicator);else{$('task').replaceChildren(indicator,el('p','首次打开可能需要一些时间，加载完成后可直接切换各 P。'));}
   const slow=setTimeout(()=>{if(indicator.isConnected)indicator.lastChild.textContent='仍在处理，请稍候……';},8000);
   try{if(!cache.pending)cache.pending=api('/api/tasks/'+id).finally(()=>{cache.pending=null;});const data=await cache.pending;
    if(request!==showRequest||cache.disposed)return;
-   if(cache.data?.digest&&cache.data.digest!==data.digest){for(const stop of cache.cleanups)stop();cache.cleanups=[];cache.views.clear();cache.scroll.clear();cache.drafts.clear();}
+   if(cache.data?.digest&&cache.data.digest!==data.digest){for(const stop of cache.cleanups)stop();cache.cleanups=[];cache.views.clear();cache.viewCleanups.clear();cache.hashes.clear();cache.scroll.clear();cache.drafts.clear();}
+   if(cache.data?.digest===data.digest&&cache.data?.contentFinal===data.contentFinal)data.result=cache.data?.result;
+   if(data.reading==='ready'&&!data.result)data.result=await api('/api/tasks/'+id+'/issues',undefined,undefined,signal);
+   if(request!==showRequest||cache.disposed)return;
    cache.data=data;cache.stale=false;
+   for(const [key]of cache.views){const unit=data.units?.find(u=>u.id===key);if(unit&&unit.hash!==cache.hashes.get(key))dropView(key);}
   }catch(e){if(request!==showRequest||cache.disposed)return;cache.stale=true;notice(e.message);if(!cache.data){$('task').replaceChildren(el('p','任务读取失败：'+e.message));button('重试读取',()=>show(id,unitId,historyMode,true),$('task'));return;}
   }finally{clearTimeout(slow);indicator.remove();}
  }
  if(request!==showRequest||cache.disposed)return;const t=cache.data;current=t;
  const box=$('task');box.replaceChildren(el('h2',t.title||'审核任务'));box.append(el('p',states[t.reading]+' · '+states[t.review]+' · '+states[t.conversion]));button('刷新任务',()=>show(id,activeUnit,'replace',true),box,true);
  if(cache.stale)box.append(el('p','更新失败，当前为已加载快照；请刷新成功后再提交操作。'));
- if(t.reading!=='ready'){if(t.error)box.append(el('p',t.error));if(!['queued','reading'].includes(t.reading))button('重新获取',async()=>{const n=await api('/api/tasks/'+id+'/refetch',{});await list();await show(n.id);},box);return;}
+ if(t.reading!=='ready'){
+  if(t.error)box.append(el('p',t.error));
+  if(['queued','reading'].includes(t.reading)){box.append(el('p','正在分批导入，已完整读取的页面可提前阅读；整篇就绪后才能提交审核。'));if(t.progress)box.append(el('p','已读取 '+t.progress.blocks+' 个内容块，已处理 '+t.progress.images+' 张图片。'));}
+  else{for(const key of [...cache.views.keys()])dropView(key);button('重新获取',async()=>{const n=await api('/api/tasks/'+id+'/refetch',{});await list();await show(n.id);},box);return;}
+  if(!t.units?.length){box.append(loading('正在读取第一个完整页面……'));poll();return;}
+ }
  link('在飞书查看或修改原文',t.url,box);box.append(el('p','正在查看已加载的固定快照，原文版本：'+t.snapshotRevision));
  const units=t.units||[], selected=units.find(u=>u.id===unitId)||units[0];activeUnit=selected?.id||'whole';
  const address=new URL(location.href);address.searchParams.set('task',id);if(selected)address.searchParams.set('unit',selected.id);else address.searchParams.delete('unit');
  if(historyMode!=='none')history[historyMode==='push'?'pushState':'replaceState']({},'',address);
- if(selected){const nav=el('nav');nav.className='phase-nav';nav.setAttribute('aria-label','攻略分页');for(const u of units){const b=button(u.title+' · '+states[u.review],()=>show(id,u.id,'push'),nav,u.id!==selected.id);if(u.id===selected.id)b.setAttribute('aria-current','page');}box.append(nav);box.append(el('p','当前页：'+selected.title+' · '+states[selected.review]));box.append(el('p','以下问题清单覆盖整篇攻略，切换页面不会隐藏未处理的问题。'));}
- for(const [label,items] of [['无法转换',t.result.unsupported],['需要核对',t.result.warnings],['阻断问题',t.result.blockers]]){if(items.length){const details=el('details');details.open=label!=='需要核对';details.append(el('summary',label+'（'+items.length+'）'));for(const i of items){const row=el('div',(t.units?.find(u=>u.id===i.unitId)?.title||'整篇')+' / '+i.location+'：'+i.reason+'；来源块 '+i.source);row.className='issue';details.append(row);}box.append(details);}}
- let content=cache.views.get(activeUnit);if(!content){content=el('div');content.className='preview';preview(t.result.document,content,selected?.id);cache.views.set(activeUnit,content);}box.append(content);
+ if(selected){const nav=el('nav');nav.className='phase-nav';nav.setAttribute('aria-label','攻略分页');for(const u of units){const b=button(u.title+' · '+states[u.review],()=>show(id,u.id,'push'),nav,u.id!==selected.id);if(u.id===selected.id)b.setAttribute('aria-current','page');}box.append(nav);box.append(el('p','当前页：'+selected.title+' · '+states[selected.review]));box.append(el('p',t.contentFinal?'以下问题清单覆盖整篇攻略，切换页面不会隐藏未处理的问题。':'当前为导入中的预览，整篇问题清单尚未完成。'));}
+ for(const [label,items] of [['无法转换',t.result?.unsupported||[]],['需要核对',t.result?.warnings||[]],['阻断问题',t.result?.blockers||[]]]){if(items.length){const details=el('details');details.open=label!=='需要核对';details.append(el('summary',label+'（'+items.length+'）'));for(const i of items){const row=el('div',(t.units?.find(u=>u.id===i.unitId)?.title||'整篇')+' / '+i.location+'：'+i.reason+'；来源块 '+i.source);row.className='issue';details.append(row);}box.append(details);}}
+ let content=cache.views.get(activeUnit);
+ if(!content){
+  const indicator=loading('正在加载当前页……');box.append(indicator);const requestedUnit=activeUnit;
+  try{
+   const value=await api('/api/tasks/'+id+'/units/'+requestedUnit,undefined,undefined,signal);
+   if(request!==showRequest||cache.disposed)return;
+   content=el('div');content.className='preview';const start=cache.cleanups.length;preview(value.document,content,selected?.id);
+   cache.viewCleanups.set(requestedUnit,cache.cleanups.slice(start));cache.views.set(requestedUnit,content);cache.hashes.set(requestedUnit,value.hash);
+   while(cache.views.size>3){const first=cache.views.keys().next().value;if(first===requestedUnit)break;dropView(first);}
+  }catch(e){if(request!==showRequest||cache.disposed)return;box.append(el('p',e.message));button('重试本页',()=>show(id,requestedUnit,'replace',true),box,true);poll();return;}
+  finally{indicator.remove();}
+ }
+ // 保留最近访问的三页；正文只在实际进入该页时请求。
+ cache.views.delete(activeUnit);cache.views.set(activeUnit,content);box.append(content);
  if(content.querySelector('figure'))button('重试本页失败图片',()=>{for(const image of content.querySelectorAll('figure[data-failed]'))image.retry();},box,true);
  if(selected){const paging=el('nav');paging.className='page-controls';paging.setAttribute('aria-label','前后页');const index=units.indexOf(selected);if(index>0)button('上一页：'+units[index-1].title,()=>show(id,units[index-1].id,'push'),paging,true);if(index+1<units.length)button('下一页：'+units[index+1].title,()=>show(id,units[index+1].id,'push'),paging,true);box.append(paging);}
+ if(t.reading!=='ready'){poll();return;}
  // 可执行动作由服务端统一判定；页面仅消费结果，并保留本地未提交的草稿。
  const available=t.actions||{},reviewAction=available.review?.[activeUnit];
  const actions=el('div');actions.className='actions';box.append(actions);const comment=el('textarea');comment.placeholder='审核意见（可选）';comment.maxLength=2000;comment.value=(selected||t).review==='pending'?(cache.drafts.get(activeUnit)??''):((selected||t).comment||'');const draftUnit=activeUnit;comment.oninput=()=>cache.drafts.set(draftUnit,comment.value);comment.disabled=!reviewAction?.allowed||cache.stale;actions.append(comment);
@@ -91,6 +120,7 @@ async function show(id,unitId,historyMode='replace',force=false){
  if(available.download?.allowed&&!cache.stale){actions.append(el('p',t.discard?'已转换，按确认清单排除部分内容':'转换完成'));const a=el('a','下载 JSON 与引用图片（tar 包）');a.className='button';a.href='/api/tasks/'+id+'/export';actions.append(a);}
  button('重新获取为新版本',async()=>{const n=await api('/api/tasks/'+id+'/refetch',{});await list();await show(n.id);},actions,true);
  if(cache.stale)for(const b of actions.querySelectorAll('button'))if(b.textContent!=='重新获取为新版本')b.disabled=true;
+ poll();
  const position=cache.scroll.get(activeUnit);if(position!==undefined)window.scrollTo(0,position);
 }
 async function members(){const rows=await api('/api/admin/members');$('member-list').replaceChildren();for(const m of rows){const row=el('div');row.className='member';row.append(el('strong',m.name));const inputs={};for(const [key,label]of [['reviewer','审核人员'],['admin','权限管理员'],['enabled','启用']]){const l=el('label',label);const c=el('input');c.type='checkbox';c.checked=m[key];inputs[key]=c;l.prepend(c);row.append(l);}button('保存',async()=>{await api('/api/admin/members/'+m.id,{version:m.version,reviewer:inputs.reviewer.checked,admin:inputs.admin.checked,enabled:inputs.enabled.checked},'PATCH');await boot();},row);$('member-list').append(row);}}

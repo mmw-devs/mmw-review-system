@@ -42,7 +42,7 @@ test('文档块按父子顺序重建，缺失、孤立、循环及未知行内�
 });
 test('无 CLI 读取保存原始块与图片，审核及排除确认后导出且禁止覆盖',async()=>{
  const f=await fixture();try{
-  const task=await f.create();assert.equal(task.reading,'ready');const d=await f.service.detail(f.admin.actor,task.id);assert.equal(d.result.unsupported.length,1);assert.equal(d.result.document.phases[0].id,'p1');
+  const task=await f.create();assert.equal(task.reading,'ready');const d=await f.service.detail(f.admin.actor,task.id);assert.equal(d.issueCounts.unsupported,1);assert.equal(d.result,undefined);assert.equal((await f.service.unit(f.admin.actor,task.id,'p1')).document.phases[0].id,'p1');
   const snap=JSON.parse(await readFile(path.join(f.service.dir(task.id),'snapshot.json'),'utf8'));assert.equal(snap.snapshot_version,2);assert.equal(snap.blocks.length,6);assert.ok(!JSON.stringify(snap).includes(f.state.token));
   await assert.rejects(f.service.conversion(f.admin.actor,task.id,{action:'export',version:task.version,digest:task.digest,discard:true}),/审核通过/);
   const basic=await f.service.review(f.admin.actor,task.id,{unitId:'basic',digest:task.digest,decision:'approved',comment:'',version:task.version,snapshotHash:task.snapshotHash});
@@ -75,7 +75,7 @@ test('原文更新、图片权限缺失与任务快照篡改的边界',async()=>
   assert.ok(src);
   const localImage=await f.service.image(f.admin.actor,task.id,src.split('/').pop());
   assert.ok(localImage.length>0);
-  const newer=await f.create();const detail=await f.service.detail(f.admin.actor,newer.id);assert.ok(detail.result.unsupported.some((i:any)=>i.reason.includes('无权访问')));
+  const newer=await f.create();const detail=await f.service.detail(f.admin.actor,newer.id);assert.ok((await f.service.issues(f.admin.actor,newer.id)).unsupported.some((i:any)=>i.reason.includes('无权访问')));
   const file=path.join(f.service.dir(newer.id),'snapshot.json');const raw=JSON.parse(await readFile(file,'utf8'));raw.title='changed';await writeFile(file,JSON.stringify(raw));await assert.rejects(f.service.detail(f.admin.actor,newer.id),/快照已变化/);
  }finally{f.store.close();}
 });
@@ -222,10 +222,62 @@ test('阻断问题只禁止导出，过期审核摘要不能取得转换资格',
   const stale=await f.service.detail(f.admin.actor,task.id);assert.equal(stale.actions.export.allowed,false);assert.equal(stale.actions.cancel.allowed,false);
   await assert.rejects(f.service.conversion(f.admin.actor,task.id,{action:'export',version:reviewed.version,digest:task.digest,discard:true}),/审核通过/);
   f.state.blocks=f.state.blocks.filter((b:any)=>['doc','p1'].includes(b.block_id));f.state.blocks[0].children=['p1'];
-  const empty=await f.create();assert.ok((await f.service.detail(f.admin.actor,empty.id)).result.blockers.length);
+  const empty=await f.create();assert.ok((await f.service.detail(f.admin.actor,empty.id)).issueCounts.blockers);
   const approved=await f.service.review(f.admin.actor,empty.id,{unitId:'p1',decision:'approved',comment:'',version:empty.version,snapshotHash:empty.snapshotHash,digest:empty.digest});
   assert.equal(approved.actions.export.allowed,false);assert.ok(approved.actions.export.reason);assert.equal(approved.actions.cancel.allowed,true);
   await assert.rejects(f.service.conversion(f.admin.actor,empty.id,{action:'export',version:approved.version,digest:empty.digest,discard:true}),/阻断/);
   assert.equal((await f.service.conversion(f.admin.actor,empty.id,{action:'cancel',version:approved.version,digest:empty.digest})).conversion,'cancelled');
  }finally{f.store.close();}
+});
+
+test('分页导入在后续页等待时可读取已闭合 P，未下载图片不是排除项且不能提前审核',async()=>{
+ const f=await fixture();let release!:()=>void;let entered!:()=>void;
+ const gate=new Promise<void>(r=>release=r), reached=new Promise<void>(r=>entered=r);
+ try{
+  f.state.blocks[0].children.push('p2','p2text');
+  f.state.blocks.push({block_id:'p2',parent_id:'doc',block_type:3,heading1:{elements:[{text_run:{content:'P2'}}]}},{block_id:'p2text',parent_id:'doc',block_type:2,text:{elements:[{text_run:{content:'尚未读取的 P2 正文'}}]}});
+  f.state.pageSize=7;
+  f.state.beforeRequest=async(url:string)=>{if(url.includes('/medias/')){entered();await gate;}};
+  const t=f.service.create(f.admin.actor,{url:'https://example.feishu.cn/docx/doc',dutyId:'demo',dutyName:'测试',profile:'standard'});
+  await reached;
+  const detail=await f.service.detail(f.admin.actor,t.id);assert.equal(detail.reading,'reading');assert.deepEqual(detail.units.map((u:any)=>u.id),['basic','p1']);
+  assert.equal(detail.result,undefined);assert.equal(detail.actions.export.allowed,false);
+  const unit=await f.service.unit(f.admin.actor,t.id,'p1');assert.equal(unit.final,false);assert.ok(JSON.stringify(unit.document).includes('image_pending'));assert.ok(!unit.unsupported.some((i:any)=>i.reason.includes('图片未能获取')));
+  assert.ok(!JSON.stringify(unit).includes('尚未读取的 P2 正文'));
+  await assert.rejects(f.service.unit(f.admin.actor,t.id,'p2'),/尚未读取完整/);
+  await assert.rejects(f.service.review(f.admin.actor,t.id,{decision:'approved',comment:'',unitId:'p1'}),/尚未就绪/);
+  await assert.rejects(f.service.issues(f.admin.actor,t.id),/尚未就绪/);
+  release();await f.service.jobs.get(t.id);
+  const ready=await f.service.detail(f.admin.actor,t.id);assert.equal(ready.reading,'ready');assert.deepEqual(ready.units.map((u:any)=>u.id),['basic','p1','p2']);
+  const completed=await f.service.unit(f.admin.actor,t.id,'p1');assert.ok(!JSON.stringify(completed).includes('image_pending'));assert.notEqual(completed.hash,unit.hash);
+  assert.ok((await readFile(path.join(f.service.dir(t.id),'blocks','0.json'),'utf8')).includes('p1'));
+ }finally{release();await Promise.all([...f.service.jobs.values()]);f.store.close();}
+});
+
+test('分页正文和图片使用独立索引，篡改、跨用户、权限撤销与旧正文缓存均不能绕过检查',async()=>{
+ const f=await fixture();try{
+  const task=await f.create(),unit=await f.service.unit(f.admin.actor,task.id,'p1');
+  // 浏览路径不能退回全量 files()/convert；审核和导出仍保留该检查。
+  f.service.files=async()=>{throw new Error('不应重读全文');};
+  assert.equal((await f.service.detail(f.admin.actor,task.id)).result,undefined);
+  assert.equal((await f.service.unit(f.admin.actor,task.id,'basic')).document.phase_contents.length,0);
+  const index=f.store.get('content',task.id),asset=Object.keys(index.assets)[0].split('/').pop();
+  assert.ok((await f.service.image(f.admin.actor,task.id,asset)).length);
+  f.state.denied=true;await assert.rejects(f.service.unit(f.admin.actor,task.id,'p1'),/无权访问/);await assert.rejects(f.service.image(f.admin.actor,task.id,asset),/无权访问/);f.state.denied=false;
+  await writeFile(path.join(f.service.dir(task.id),'units',unit.hash+'.json'),'{}');await assert.rejects(f.service.unit(f.admin.actor,task.id,'p1'),/已变化或不完整/);
+ }finally{f.store.close();}
+});
+
+test('分页截断容器时不发布残缺表格，后续版本变化撤回预览',async()=>{
+ const {completePrefix}=await import('../src/feishu-api.ts');
+ const blocks:any[]=[{block_id:'doc',block_type:1,children:['p1','table','p2']},{block_id:'p1',parent_id:'doc',block_type:3,heading1:{elements:[{text_run:{content:'P1'}}]}},{block_id:'table',parent_id:'doc',block_type:31,children:['cell']},{block_id:'cell',parent_id:'table',block_type:32,children:['text']}];
+ assert.deepEqual(completePrefix(blocks,'doc').map(b=>b.block_id),['doc','p1']);
+ const f=await fixture();let release!:()=>void,entered!:()=>void;const gate=new Promise<void>(r=>release=r),reached=new Promise<void>(r=>entered=r);
+ try{
+  f.state.beforeRequest=async(url:string)=>{if(url.includes('/medias/')){entered();await gate;}};
+  const t=f.service.create(f.admin.actor,{url:'https://example.feishu.cn/docx/doc',dutyId:'demo',dutyName:'测试'});await reached;
+  assert.ok((await f.service.detail(f.admin.actor,t.id)).units.length);
+  f.state.revision++;release();await f.service.jobs.get(t.id);
+  assert.equal((await f.service.detail(f.admin.actor,t.id)).reading,'failed');await assert.rejects(f.service.unit(f.admin.actor,t.id,'p1'),/尚未就绪/);
+ }finally{release();await Promise.all([...f.service.jobs.values()]);f.store.close();}
 });

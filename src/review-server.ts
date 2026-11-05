@@ -12,6 +12,32 @@ async function input(req: IncomingMessage) {
   if (!req.headers['content-type']?.startsWith('application/json')) throw new AppError(415, '请使用 JSON 请求');
   let size=0;const chunks: Buffer[]=[];for await(const chunk of req){size+=chunk.length;if(size>32768)throw new AppError(413,'请求过大');chunks.push(chunk);}try{return JSON.parse(Buffer.concat(chunks).toString());}catch{throw new AppError(400,'请求内容不是有效 JSON');}
 }
+// 将内部错误统一为公开响应；前端按 clearTask 清理缓存，不再从状态码或提示文字推断权限。
+function errorResponse(error: unknown): { status: number; body: { error: string; code: string; clearTask: boolean } } {
+  if (error instanceof ApiError) {
+    const kinds: Record<string, [number, string, boolean]> = {
+      authorization: [401, 'AUTHORIZATION_REQUIRED', true],
+      permission: [403, 'SOURCE_PERMISSION_DENIED', true],
+      scope: [403, 'SOURCE_SCOPE_REQUIRED', true],
+      network: [503, 'UPSTREAM_UNAVAILABLE', false],
+      structure: [409, 'SOURCE_STRUCTURE_INVALID', false],
+    };
+    const mapped = Object.hasOwn(kinds, error.kind) ? kinds[error.kind] : undefined;
+    if (mapped) {
+      const [status, code, clearTask] = mapped;
+      return { status, body: { error: error.message, code, clearTask } };
+    }
+  }
+  if (error instanceof AppError) {
+    const codes: Record<number, string> = {
+      400: 'INVALID_REQUEST', 401: 'SESSION_REQUIRED', 403: 'ACCESS_DENIED', 404: 'NOT_FOUND',
+      409: 'STATE_CONFLICT', 413: 'REQUEST_TOO_LARGE', 415: 'UNSUPPORTED_MEDIA_TYPE',
+      429: 'RATE_LIMITED', 500: 'INTERNAL_ERROR', 503: 'SERVICE_UNAVAILABLE',
+    };
+    return { status: error.status, body: { error: error.message, code: codes[error.status] ?? `HTTP_${error.status}`, clearTask: error.status === 401 || error.status === 403 } };
+  }
+  return { status: 500, body: { error: '服务处理失败，未输出未确认的正式文件', code: 'INTERNAL_ERROR', clearTask: false } };
+}
 export function createReviewServer(auth: Auth, service = new ReviewService(auth)) {
   const rates=new Map<string,{at:number,count:number}>();
   const server=createServer(async(req,res)=>{
@@ -52,9 +78,8 @@ export function createReviewServer(auth: Auth, service = new ReviewService(auth)
       throw new AppError(404,'接口不存在');
     }catch(error){
       if(error instanceof ApiError && error.kind==='authorization'){try{auth.revoke(auth.session(jar.mmw_session).actor);}catch{}}
-      const status=error instanceof AppError?error.status:error instanceof ApiError?(error.kind==='authorization'?401:error.kind==='network'?503:409):500;
-      const message=error instanceof AppError||error instanceof ApiError?error.message:'服务处理失败，未输出未确认的正式文件';
-      if(!res.headersSent)send(status,{error:message});else res.end();
+      const response=errorResponse(error);
+      if(!res.headersSent)send(response.status,response.body);else res.end();
     }
   });
   server.requestTimeout=60_000;server.headersTimeout=15_000;

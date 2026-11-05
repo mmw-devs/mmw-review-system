@@ -151,6 +151,7 @@ test('分 P 审核校验未知页和过期决定，单 P 通过可导出完整�
   assert.equal(current.review,'rejected');assert.equal(current.unitReviews['p1-5'].reviewer,f.admin.actor);
   const done=await f.service.conversion(f.admin.actor,task.id,{action:'export',version:current.version,digest:task.digest,discard:true});
   assert.equal(done.conversion,'completed');assert.equal(done.review,'rejected');assert.equal(done.unitReviews.p2,undefined);
+  assert.equal(done.actions.review.p2.allowed,true);assert.equal(done.actions.export.allowed,false);assert.equal(done.actions.download.allowed,true);
   const json=JSON.parse(await readFile(path.join(f.service.dir(task.id),'strategy.json'),'utf8'));
   assert.deepEqual(json.phases.map((p:any)=>p.id),['p1','p1-5','p2']);
   assert.ok((await f.service.export(f.admin.actor,task.id)).length>512);
@@ -169,7 +170,62 @@ test('旧任务保留整篇审核和原摘要，重新获取才启用分 P',asyn
   delete task.reviewMode;delete task.unitReviews;task.digest=digest;
   f.store.put('task',task.id,task);await writeFile(path.join(dir,'report.json'),JSON.stringify({...result,digest,converter:'review-1'}));
   const detail=await f.service.detail(f.admin.actor,task.id);assert.equal(detail.units,undefined);
+  assert.equal(detail.actions.review.whole.allowed,true);assert.equal(detail.actions.export.allowed,false);
   const reviewed=await f.service.review(f.admin.actor,task.id,{decision:'approved',comment:'整篇审核',version:task.version,snapshotHash:task.snapshotHash});assert.equal(reviewed.review,'approved');
+  assert.equal(reviewed.actions.review.whole.allowed,false);assert.equal(reviewed.actions.export.allowed,true);
   const done=await f.service.conversion(f.admin.actor,task.id,{action:'export',version:reviewed.version,digest,discard:true});assert.equal(done.conversion,'completed');
+ }finally{f.store.close();}
+});
+
+test('HTTP 权限失效明确要求清空缓存，状态冲突和暂时故障保留缓存',async()=>{
+ const f=await fixture(),{server}=createReviewServer(f.auth,f.service);try{
+  const task=await f.create();
+  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+(server.address()as any).port;f.config.origin=base;
+  const headers={Cookie:'mmw_session='+f.admin.session};const url=base+'/api/tasks/'+task.id;
+  const anonymous=await fetch(url);assert.equal(anonymous.status,401);assert.equal((await anonymous.json()).clearTask,true);
+  assert.equal((await fetch(url,{headers})).status,200);
+  f.state.denied=true;
+  const denied=await fetch(url,{headers}),body=await denied.json();
+  assert.equal(denied.status,403);assert.equal(body.code,'SOURCE_PERMISSION_DENIED');assert.equal(body.clearTask,true);assert.ok(!JSON.stringify(body).includes(f.state.token));
+  f.state.denied=false;
+  const csrf=(await(await fetch(base+'/api/me',{headers})).json()).csrf;
+  const stale=await fetch(url+'/review',{method:'POST',headers:{...headers,Origin:base,'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({unitId:'basic',decision:'approved',comment:'',snapshotHash:task.snapshotHash,digest:task.digest,version:task.version-1})});
+  assert.equal(stale.status,409);assert.equal((await stale.json()).clearTask,false);
+  for(const [kind,status,code,clearTask] of [['scope',403,'SOURCE_SCOPE_REQUIRED',true],['network',503,'UPSTREAM_UNAVAILABLE',false],['structure',409,'SOURCE_STRUCTURE_INVALID',false],['authorization',401,'AUTHORIZATION_REQUIRED',true]] as const){
+   f.service.detail=async()=>{throw new ApiError(kind,'模拟接口错误');};
+   const response=await fetch(url,{headers});assert.equal(response.status,status);assert.deepEqual(await response.json(),{error:'模拟接口错误',code,clearTask});
+  }
+ }finally{await new Promise<void>(r=>server.close(()=>r()));f.store.close();}
+});
+
+test('详情与操作响应共享动作规则，取消后禁止待审页操作且不持久化派生动作',async()=>{
+ const f=await fixture();try{
+  const task=await f.create();const initial=await f.service.detail(f.admin.actor,task.id);
+  assert.equal(initial.actions.review.basic.allowed,true);assert.equal(initial.actions.review.p1.allowed,true);assert.equal(initial.actions.export.allowed,false);assert.equal(initial.actions.cancel.allowed,false);
+  const input={unitId:'p1',decision:'approved',comment:'',version:task.version,snapshotHash:task.snapshotHash,digest:task.digest};
+  const reviewed=await f.service.review(f.admin.actor,task.id,input);
+  assert.equal(reviewed.actions.export.allowed,true);assert.equal(reviewed.actions.cancel.allowed,true);assert.equal(reviewed.actions.review.basic.allowed,true);
+  const cancelInput={action:'cancel',version:reviewed.version,digest:task.digest};
+  const cancelled=await f.service.conversion(f.admin.actor,task.id,cancelInput);
+  assert.equal(cancelled.actions.review.basic.allowed,false);assert.ok(cancelled.actions.review.basic.reason);assert.equal(cancelled.actions.export.allowed,false);assert.equal(cancelled.actions.cancel.allowed,false);assert.equal(cancelled.actions.download.allowed,false);
+  assert.deepEqual((await f.service.detail(f.admin.actor,task.id)).actions,cancelled.actions);
+  assert.deepEqual((await f.service.conversion(f.admin.actor,task.id,cancelInput)).actions,cancelled.actions);
+  await assert.rejects(f.service.review(f.admin.actor,task.id,{...input,unitId:'basic',version:cancelled.version}),/取消/);
+  assert.equal(f.store.get('task',task.id).actions,undefined);
+ }finally{f.store.close();}
+});
+
+test('阻断问题只禁止导出，过期审核摘要不能取得转换资格',async()=>{
+ const f=await fixture();try{
+  const task=await f.create();const reviewed=await f.service.review(f.admin.actor,task.id,{unitId:'p1',decision:'approved',comment:'',version:task.version,snapshotHash:task.snapshotHash,digest:task.digest});
+  const stored=f.store.get('task',task.id);stored.unitReviews.p1.digest='old';f.store.put('task',task.id,stored);
+  const stale=await f.service.detail(f.admin.actor,task.id);assert.equal(stale.actions.export.allowed,false);assert.equal(stale.actions.cancel.allowed,false);
+  await assert.rejects(f.service.conversion(f.admin.actor,task.id,{action:'export',version:reviewed.version,digest:task.digest,discard:true}),/审核通过/);
+  f.state.blocks=f.state.blocks.filter((b:any)=>['doc','p1'].includes(b.block_id));f.state.blocks[0].children=['p1'];
+  const empty=await f.create();assert.ok((await f.service.detail(f.admin.actor,empty.id)).result.blockers.length);
+  const approved=await f.service.review(f.admin.actor,empty.id,{unitId:'p1',decision:'approved',comment:'',version:empty.version,snapshotHash:empty.snapshotHash,digest:empty.digest});
+  assert.equal(approved.actions.export.allowed,false);assert.ok(approved.actions.export.reason);assert.equal(approved.actions.cancel.allowed,true);
+  await assert.rejects(f.service.conversion(f.admin.actor,empty.id,{action:'export',version:approved.version,digest:empty.digest,discard:true}),/阻断/);
+  assert.equal((await f.service.conversion(f.admin.actor,empty.id,{action:'cancel',version:approved.version,digest:empty.digest})).conversion,'cancelled');
  }finally{f.store.close();}
 });

@@ -27,7 +27,7 @@
 > 当前模板采用 systemd。TODO：生产验收后确认；保留原候选说明：
 >
 > - **pm2** —— 对 Node 友好，方便自省（`pm2 ls`、`pm2 logs`、
->   `pm2 restart mmw-review-system`）。ecosystem 配置位于
+>   `pm2 restart mmw-review-system`）。若未来选择 pm2，需另行创建 ecosystem 配置，拟放置于
 >   `${DEPLOY_DIR}/ecosystem.config.js`。
 > - **systemd** —— Ubuntu 原生支持，可与 `journalctl` 协作。Unit
 >   文件位于 `/etc/systemd/system/mmw-review-system.service`。
@@ -72,7 +72,7 @@
 
 ## 6. 部署后的冒烟测试
 
-_TODO —— 至少写一条 curl/grep 探测验证服务可用。例如：_
+当前部署 workflow 已检查本机 `/health`，证书检查脚本还检查 HTTPS 健康响应。TODO：补全生产验收与冒烟流程；本机健康响应不代替真实授权、读取和导出验证。外部入口检查示例：
 
 ```bash
 curl -fsS "https://${PROD_HOST}/health" | jq .

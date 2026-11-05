@@ -78,7 +78,21 @@ try{
  const beforeRefresh=detailRequests;
  await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='刷新任务').click()");
  await waitFor("document.querySelector('.loading') !== null");assert.ok(await evaluate("document.querySelector('.preview') !== null"));await waitFor("document.querySelector('.loading') === null");assert.equal(detailRequests,beforeRefresh+1);
+ // 新版本取消转换后，服务端禁止剩余页面审核，页面同步收起动作并说明原因。
+ const previousTask=await evaluate("new URL(location.href).searchParams.get('task')");
+ await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='重新获取为新版本').click()");
+ await waitFor("new URL(location.href).searchParams.get('task')!=="+JSON.stringify(previousTask)+" && Array.from(document.querySelectorAll('#task button')).some(x=>x.textContent==='刷新任务')");await Promise.all([...f.service.jobs.values()]);
+ await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='刷新任务').click()");await waitFor("document.querySelector('.phase-nav') !== null");
+ await evaluate("Array.from(document.querySelectorAll('.phase-nav button')).find(x=>x.textContent.startsWith('P1阶段')).click()");
+ await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='审核通过').click()");
+ await waitFor("Array.from(document.querySelectorAll('#task button')).some(x=>x.textContent==='放弃本次转换')");
+ await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='放弃本次转换').click()");await waitFor("document.querySelector('.actions')?.innerText.includes('取消')");
+ await evaluate("Array.from(document.querySelectorAll('.phase-nav button')).find(x=>x.textContent.startsWith('副本基本信息')).click()");
+ assert.ok(await evaluate("document.querySelector('.phase-nav [aria-current=page]').textContent.includes('待审核')"));
+ assert.ok(await evaluate("document.querySelector('.actions textarea').disabled"));
+ assert.ok(await evaluate("!Array.from(document.querySelectorAll('.actions button')).some(x=>['审核通过','驳回','转换并保存 JSON','放弃本次转换'].includes(x.textContent))"));
+ assert.ok(await evaluate("document.querySelector('.actions').innerText.includes('取消')"));
  f.state.denied=true;
  await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='刷新任务').click()");await waitFor("document.querySelector('.preview') === null && document.getElementById('notice').innerText.includes('无权访问')");
- assert.deepEqual(errors,[]);console.log('浏览器验收通过：登录页、任务提交、分 P 缓存命中、草稿保留、加载动画、刷新定位、前进后退、图片失败与重试、单 P 审核导出、权限失效清理、排除确认、导出入口、移动端布局；使用模拟飞书服务');
+ assert.deepEqual(errors,[]);console.log('浏览器验收通过：登录页、任务提交、分 P 缓存命中、草稿保留、加载动画、刷新定位、前进后退、图片失败与重试、单 P 审核导出、取消后动作同步、权限失效清理、排除确认、导出入口、移动端布局；使用模拟飞书服务');
 }finally{ws?.close();proc.kill();await new Promise<void>(r=>server.close(()=>r()));f.store.close();}

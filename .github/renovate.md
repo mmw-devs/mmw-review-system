@@ -1,52 +1,19 @@
-# Renovate — mmw-review-system
+# Renovate 配置说明
 
-This repository uses [Renovate](https://github.com/renovatebot/renovate) to keep
-its dependencies up-to-date. See [`renovate.json`](../../renovate.json) for the
-active configuration.
+本仓库的依赖更新策略以 [renovate.json](../renovate.json) 为准。配置文件存在不表示 GitHub App 已安装或正在运行；实际启用状态需在仓库设置中核验。
 
-## What Renovate does here
+## 已配置的策略
 
-- Opens PRs for outdated npm dependencies
-- Groups related packages (e.g. all `@types/*`, all ESLint packages) into single
-  PRs to reduce noise
-- Auto-merges **minor** and **patch** upgrades
-- Requires **manual review** for **major** upgrades (they may contain breaking
-  changes)
-- Creates PRs for security advisories under the `security` label
+- minor、patch、pin 和 digest 更新允许自动合并，仍受平台权限与分支保护约束。
+- major 更新禁止自动合并，需要人工审核。
+- 为类型声明、ESLint、Prettier、测试及 TypeScript 工具配置分组。
+- 常规更新和锁文件维护的时间窗口为上海时间每周一凌晨 4 点前；不保证任务恰在该时间执行。
+- 安全告警更新已配置启用，并使用 `security`、`dependencies` 标签。
 
-## Cadence
+当前项目没有第三方运行依赖；分组配置是后续引入相关依赖时使用的规则，不表示这些工具已经安装。
 
-Renovate runs once a week, **Monday before 4am (Asia/Shanghai)**.
+## 作用范围与调整
 
-## Scope — only this repo
+配置仅适用于本仓库，不自动启用组织内其他仓库。这里尚未发布供其他仓库引用的共享 preset；不要把示意引用当成现成入口。
 
-This config is scoped to `mmw-review-system`. **No other repositories in
-mmw-devs are automatically upgraded by this configuration.** Each repo opts in
-separately:
-
-```text
-[other repo]
-└── renovate.json  →  { "extends": ["local>mmw-devs/mmw-review-system:renovate-preset"] }
-```
-
-When you're ready to enable Renovate on another mmw-devs repository:
-
-1. Install the **Renovate** GitHub App on that repository (or organization-wide
-   if you decide to roll it out fully).
-2. Either:
-   - Copy [`renovate.json`](../../renovate.json) into the new repo, **or**
-   - Promote the configuration into a [Renovate preset](https://docs.renovatebot.com/config-presets/)
-     and reference it from each repo.
-
-## Pinning the Renovate version
-
-The behaviour described above is shipped by whatever Renovate version is
-running in the GitHub App at PR-creation time. If you need strict
-reproducibility, consider self-hosting Renovate and pinning the image — the
-scope of this repo's config file does not change either way.
-
-## Disabling Renovate temporarily
-
-If a PR from Renovate is undesirable, close it and add the comment
-`renovate:disable` — Renovate will then skip that package until you re-enable
-it.
+调整更新或暂停策略时，应修改本仓库配置并通过 PR 审核，或由有权限的管理员调整该仓库的 App 设置。关闭单个 PR 不作为已停用某个包更新的证据。不要将 major 更新改为自动合并，也不要擅自扩展到其他仓库。

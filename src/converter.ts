@@ -59,7 +59,7 @@ export function color(text: string): string {
 }
 
 // 输出候选攻略及诊断；排除决策由 CLI 在展示具体清单后执行，此函数从不授权丢弃。
-export function convert(snapshot: Snapshot, options: Options, splitPhases = true) {
+export function convert(snapshot: Snapshot, options: Options, splitPhases = true, preview = false) {
   const unsupported: Issue[] = [], warnings: Issue[] = [...(snapshot.sourceWarnings ?? [])], blockers: Issue[] = [];
   let location = '文档开头';
   let reportingUnit: string | undefined = splitPhases ? 'basic' : undefined;
@@ -110,6 +110,8 @@ export function convert(snapshot: Snapshot, options: Options, splitPhases = true
       if (t === 'img') {
         if (a.crop) return reject(n, '图片裁剪尚不能正确还原');
         const image = snapshot.images[source(n)];
+        // 预览中的未下载图片不是排除项；正式转换永远不接受此占位类型。
+        if (preview && !image) return [{ type: 'image_pending', source: source(n), width: Number(a.width) || undefined, height: Number(a.height) || undefined }];
         if (!image?.src) return reject(n, image?.error ?? '图片未能获取');
         const result: any = { type: 'image', src: image.src };
         for (const key of ['width', 'height']) if (Number(a[key]) > 0) result[key] = Math.round(Number(a[key]));
@@ -274,8 +276,10 @@ export function convert(snapshot: Snapshot, options: Options, splitPhases = true
     content.sections = result;
   }
   reportingUnit = undefined;
-  if (!doc.phases.length) block(root, '未识别到阶段，请使用明确的 P1 阶段标题；不自动伪造阶段');
-  for (const reason of validateStrategy(doc)) issue(blockers, root, 'VALIDATION', reason);
+  if (!preview) {
+    if (!doc.phases.length) block(root, '未识别到阶段，请使用明确的 P1 阶段标题；不自动伪造阶段');
+    for (const reason of validateStrategy(doc)) issue(blockers, root, 'VALIDATION', reason);
+  }
   const digest = fingerprint({ snapshot, options, unsupported, document: doc, warnings, blockers });
   return { document: doc, unsupported, warnings, blockers, digest };
 }

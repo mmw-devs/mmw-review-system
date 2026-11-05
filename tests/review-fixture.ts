@@ -22,12 +22,14 @@ export async function fixture() {
  const state:any={revision:1,user:'admin-user',tenant:config.tenant,denied:false,mediaDenied:false,calls:[],token:random(),refresh:random(),refreshCount:0,blocks:rawBlocks()};
  const fetcher:any=async(url:string,init:any={})=>{
   state.calls.push({url,method:init.method??'GET'});
+  await state.beforeRequest?.(url);
   const ok=(data:any)=>new Response(JSON.stringify({code:0,data}),{headers:{'content-type':'application/json'}});
   if(url.endsWith('/oauth/token')){if(JSON.parse(init.body).grant_type==='refresh_token')state.refreshCount++;if(state.refreshWait)await state.refreshWait;return new Response(JSON.stringify({code:0,access_token:state.token,refresh_token:state.refresh,expires_in:7200,refresh_expires_in:86400,scope:config.scopes}));}
   if(url.endsWith('/user_info'))return ok({open_id:state.user,tenant_key:state.tenant,name:state.user==='admin-user'?'测试管理员':'测试成员'});
   if(state.denied)return new Response('{}',{status:403});
   if(url.includes('/spaces/get_node'))return ok({node:{obj_type:'docx',obj_token:'doc'}});
   if(url.endsWith('/documents/doc'))return ok({document:{document_id:'doc',title:'模拟攻略',revision_id:state.revision}});
+  if(url.includes('/children')){const q=new URL(url).searchParams,start=Number(q.get('page_token')||0),size=state.pageSize||500,end=start+size;return ok({items:state.blocks.slice(start,end),has_more:end<state.blocks.length,...(end<state.blocks.length?{page_token:String(end)}:{})});}
   if(url.includes('/documents/doc/blocks'))return ok({items:new URL(url).searchParams.get('page_size')==='1'?state.blocks.slice(0,1):state.blocks,has_more:false});
   if(url.includes('/medias/'))return state.mediaDenied?new Response('{}',{status:403}):new Response(png,{headers:{'content-type':'image/png'}});
   throw new Error('未预期的模拟请求');

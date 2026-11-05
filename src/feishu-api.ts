@@ -12,6 +12,8 @@ const fail = (message: string): never => { throw new ApiError('structure', messa
 const node = (tag: string, id: string, children: (Node | string)[] = [], attrs: Record<string, string> = {}): Node => ({ tag, attrs: { id, ...attrs }, children });
 const digest = (v: string | Buffer) => createHash('sha256').update(v).digest('hex');
 export const READER_VERSION = 'openapi-1';
+const requestSlots = new WeakMap<typeof fetch, number>();
+export type ReadProgress = { publish: (snapshot: ApiSnapshot) => Promise<void>; priority: () => Set<string> };
 export type ApiSnapshot = Snapshot & { snapshot_version: 2; reader: string; blocks: any[]; source: any; completeness: any; tree: Node };
 
 /** 所有网络请求限定官方 API；注入 fetch 仅供离线测试，不从网页接收上游地址。 */
@@ -24,6 +26,13 @@ export class FeishuApi {
     if (!endpoint.startsWith('/open-apis/') || /[\r\n]/.test(endpoint)) fail('接口地址无效');
     for (let attempt = 0; attempt < 3; attempt++) {
       this.checkpoint();
+      // 生产请求共享限速，多个任务及权限检查也计入；测试注入的模拟接口无需等待。
+      if (this.fetcher === fetch) {
+        const at = Math.max(Date.now(), requestSlots.get(this.fetcher) ?? 0);
+        requestSlots.set(this.fetcher, at + 225);
+        if (at > Date.now()) await new Promise(r => setTimeout(r, at - Date.now()));
+        this.checkpoint();
+      }
       const token = await this.getToken();
       let response: Response;
       try { response = await this.fetcher('https://open.feishu.cn' + endpoint, { headers: { Authorization: `Bearer ${token}` }, redirect: 'error', signal: AbortSignal.timeout(30_000) }); }
@@ -34,6 +43,14 @@ export class FeishuApi {
         throw new ApiError('network', '飞书限流或服务暂不可用，请稍后重试');
       }
       if (response.status === 401) { await response.body?.cancel(); throw new ApiError('authorization', '飞书授权已失效，请重新授权'); }
+      if (response.status === 400) {
+        const error = await response.clone().json().catch(() => ({}));
+        if (error.code === 99991400) {
+          await response.body?.cancel();
+          if (attempt < 2) { await new Promise(r => setTimeout(r, 1000 * 2 ** attempt)); continue; }
+          throw new ApiError('network', '飞书限流，请稍后重试');
+        }
+      }
       if (!response.ok) { await response.body?.cancel(); throw new ApiError('permission', '飞书资源不存在或当前身份无权访问'); }
       const bytes = await readLimited(response, binary ? Number.POSITIVE_INFINITY : 24 * 1024 * 1024);
       this.checkpoint();
@@ -41,6 +58,10 @@ export class FeishuApi {
       let json: any;
       try { json = JSON.parse(bytes.toString('utf8')); } catch { throw new ApiError('structure', '飞书返回内容无法识别'); }
       if (json.code !== 0) {
+        if (json.code === 99991400) {
+          if (attempt < 2) { await new Promise(r => setTimeout(r, 1000 * 2 ** attempt)); continue; }
+          throw new ApiError('network', '飞书限流，请稍后重试');
+        }
         if ([99991661, 99991663, 99991668, 99991669].includes(json.code)) throw new ApiError('authorization', '飞书授权已失效，请重新授权');
         if ([99991672, 99991679].includes(json.code)) throw new ApiError('scope', '缺少飞书接口权限，请补充应用配置及用户授权');
         throw new ApiError('permission', '飞书拒绝读取，请检查当前用户的文档及资源权限');
@@ -61,51 +82,66 @@ export class FeishuApi {
     if (!/^[a-zA-Z0-9]+$/.test(token)) fail('图片素材标识无效');
     return this.request(`/open-apis/drive/v1/medias/${token}/download`, true) as Promise<Buffer>;
   }
-  async read(url: string, runDir: string): Promise<ApiSnapshot> {
+  async read(url: string, runDir: string, progress?: ReadProgress): Promise<ApiSnapshot> {
     const id = await this.resolve(url), before = await this.meta(id);
     if (!Number.isInteger(before?.revision_id) || !before.title?.trim()) fail('文档标题或版本不完整');
     const blocks: any[] = [], pages = new Set<string>(); let cursor = '', totalBytes = 0;
+    const images: ApiSnapshot['images'] = {}, sheets: ApiSnapshot['sheets'] = {};
+    const source = { document_id: id, url: documentUrl(url), revision: before.revision_id, fetched_at: new Date().toISOString() };
+    await mkdir(path.join(runDir, 'assets'), { recursive: true, mode: 0o700 });
+    await mkdir(path.join(runDir, 'blocks'), { recursive: true, mode: 0o700 });
+    let snapshot: ApiSnapshot;
     for (let page = 0; ; page++) {
       if (page >= 200) fail('文档分页超过上限');
-      const result = await this.request(`/open-apis/docx/v1/documents/${id}/blocks?page_size=500&document_revision_id=${before.revision_id}${cursor ? '&page_token=' + encodeURIComponent(cursor) : ''}`);
+      const result = await this.request(`/open-apis/docx/v1/documents/${id}/blocks/${id}/children?with_descendants=true&page_size=500&document_revision_id=${before.revision_id}${cursor ? '&page_token=' + encodeURIComponent(cursor) : ''}`);
       if (!Array.isArray(result?.items)) fail('未取得文档块');
       totalBytes += Buffer.byteLength(JSON.stringify(result.items));
       if (totalBytes > 24 * 1024 * 1024 || blocks.length + result.items.length > 50000) fail('文档总量超过初版上限');
+      if (result.has_more) {
+        if (!result.page_token || pages.has(result.page_token)) fail('文档分页缺失或重复');
+        pages.add(result.page_token);
+      }
       blocks.push(...result.items);
-      if (!result.has_more) break;
-      cursor = result.page_token;
-      if (!cursor || pages.has(cursor)) fail('文档分页缺失或重复'); pages.add(cursor);
-    }
-    const tree = blocksToTree(blocks, id, before.title);
-    const snapshot: ApiSnapshot = { snapshot_version: 2, reader: READER_VERSION, documentId: id, revision: before.revision_id, title: before.title, url: documentUrl(url), content: '', tree, blocks,
-      source: { document_id: id, url: documentUrl(url), revision: before.revision_id, fetched_at: new Date().toISOString() }, images: {}, sheets: {}, completeness: { pages: pages.size + 1, blocks: blocks.length, relationships: true, revision: false } };
-    snapshot.sourceWarnings = blocks.flatMap(block => {
-      const messages: string[] = [];
-      if (JSON.stringify(block).includes('text_color')) messages.push('文字颜色枚举已映射到色系，具体色值与飞书主题的显示差异需核对');
-      if (block.block_type === 31) messages.push('普通表格保留内容与行列关系，列宽和外观需要核对');
-      if (block.block_type === 14) messages.push('代码正文保留，语言标识尚未映射');
-      return messages.map(reason => ({ code: 'DISPLAY', source: block.block_id, location: '来源文档', reason }));
-    });
-    await mkdir(path.join(runDir, 'assets'), { recursive: true, mode: 0o700 });
-    for (const block of blocks) {
-      if (block.block_type === 27 && block.image?.token) {
+      await writeFile(path.join(runDir, 'blocks', `${page}.json`), JSON.stringify(result.items), { flag: 'wx', mode: 0o600 });
+      const visible = result.has_more ? completePrefix(blocks, id) : blocks;
+      const tree = blocksToTree(visible, id, before.title);
+      for (const block of visible) if (block.block_type === 30) sheets[block.block_id] = { error: '原生电子表格的样式与版本读取尚未完成验证，需明确排除或取消转换' };
+      snapshot = { snapshot_version: 2, reader: READER_VERSION, documentId: id, revision: before.revision_id, title: before.title, url: documentUrl(url), content: '', tree, blocks: visible,
+        source, images, sheets, completeness: { pages: page + 1, blocks: blocks.length, content: !result.has_more, relationships: !result.has_more, revision: false } };
+      snapshot.sourceWarnings = visible.flatMap(block => {
+        const messages: string[] = [];
+        if (JSON.stringify(block).includes('text_color')) messages.push('文字颜色枚举已映射到色系，具体色值与飞书主题的显示差异需核对');
+        if (block.block_type === 31) messages.push('普通表格保留内容与行列关系，列宽和外观需要核对');
+        if (block.block_type === 14) messages.push('代码正文保留，语言标识尚未映射');
+        return messages.map(reason => ({ code: 'DISPLAY', source: block.block_id, location: '来源文档', reason }));
+      });
+      if ((await this.meta(id))?.revision_id !== before.revision_id) fail('读取期间文档版本变化，请重新获取');
+      await progress?.publish(snapshot);
+      const pending = visible.filter(b => b.block_type === 27 && b.image?.token && !images[b.block_id]);
+      let published = Date.now();
+      while (pending.length) {
+        const priority = progress?.priority();
+        const index = pending.findIndex(b => priority?.has(b.block_id));
+        const block = pending.splice(index < 0 ? 0 : index, 1)[0];
         try {
           const bytes = await this.media(block.image.token); let ext: string;
           try { ext = imageExtension(bytes); } catch { throw new ApiError('structure', '素材文件不是支持的图片格式'); }
           const src = `assets/${digest(id + ':' + block.block_id).slice(0, 24)}.${ext}`;
           await writeFile(path.join(runDir, src), bytes, { flag: 'wx', mode: 0o600 });
-          snapshot.images[block.block_id] = { src, sha256: digest(bytes) };
+          images[block.block_id] = { src, sha256: digest(bytes) };
         } catch (error) {
           if (!(error instanceof ApiError) || !['permission', 'structure'].includes(error.kind)) throw error;
-          snapshot.images[block.block_id] = { error: error.message };
+          images[block.block_id] = { error: error.message };
         }
+        if (Date.now() - published >= 400 || !pending.length) { await progress?.publish(snapshot); published = Date.now(); }
       }
-      if (block.block_type === 30) snapshot.sheets[block.block_id] = { error: '原生电子表格的样式与版本读取尚未完成验证，需明确排除或取消转换' };
+      if (!result.has_more) break;
+      cursor = result.page_token;
     }
     if ((await this.meta(id))?.revision_id !== before.revision_id) fail('读取期间文档版本变化，请重新获取');
-    snapshot.completeness.revision = true; this.checkpoint();
-    await writeFile(path.join(runDir, 'snapshot.json'), JSON.stringify(snapshot, null, 2), { flag: 'wx', mode: 0o600 });
-    return snapshot;
+    snapshot!.completeness.revision = true; this.checkpoint();
+    await writeFile(path.join(runDir, 'snapshot.json'), JSON.stringify(snapshot!, null, 2), { flag: 'wx', mode: 0o600 });
+    return snapshot!;
   }
   async check(snapshot: ApiSnapshot) {
     if (await this.resolve(snapshot.url) !== snapshot.documentId) fail('原文地址的目标已变化，请重新获取');
@@ -124,6 +160,35 @@ export async function readLimited(response: Response, limit: number): Promise<Bu
   catch (error) { await reader.cancel().catch(() => {}); if (error instanceof ApiError) throw error; throw new ApiError('network', '接口返回中断，请重新读取'); }
   finally { reader.releaseLock(); }
   return Buffer.concat(chunks);
+}
+
+/** 分页可截断任意容器；只发布从文档开头连续且子树完整的顶层块。 */
+export function completePrefix(blocks: any[], documentId: string): any[] {
+  const map = new Map<string, any>();
+  for (const block of blocks) {
+    if (!block?.block_id || map.has(block.block_id)) fail('文档分页存在重复或无效块');
+    map.set(block.block_id, block);
+  }
+  const root = map.get(documentId);
+  if (!root || root.block_type !== 1 || !Array.isArray(root.children)) fail('文档根节点缺失');
+  const selected = new Set<string>(), children: string[] = [];
+  function collect(id: string, parent: string, visiting: Set<string>, depth: number): string[] | undefined {
+    if (depth > 100 || visiting.has(id)) fail('文档块存在循环');
+    const block = map.get(id); if (!block) return;
+    if (block.parent_id !== parent || !Array.isArray(block.children ?? [])) fail('文档父子关系不一致');
+    const next = new Set(visiting).add(id), result = [id];
+    for (const child of block.children ?? []) {
+      const ids = collect(child, id, next, depth + 1); if (!ids) return;
+      result.push(...ids);
+    }
+    return result;
+  }
+  for (const id of root.children) {
+    const ids = collect(id, documentId, new Set([documentId]), 0); if (!ids) break;
+    for (const child of ids) { if (selected.has(child)) fail('文档块多次引用'); selected.add(child); }
+    children.push(id);
+  }
+  return [{ ...root, children }, ...blocks.filter(b => selected.has(b.block_id))];
 }
 
 /** 将原始块转成现有转换器的节点；未知行内元素排除整块，防止丢掉局部语义。 */

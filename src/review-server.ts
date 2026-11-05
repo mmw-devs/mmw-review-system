@@ -66,6 +66,10 @@ export function createReviewServer(auth: Auth, service = new ReviewService(auth)
       if(req.method==='GET'&&url.pathname==='/api/admin/audit'){auth.admin(actor);return send(200,auth.store.all('audit').slice(-100).reverse());}
       const member=url.pathname.match(/^\/api\/admin\/members\/([a-f0-9]{64})$/);if(req.method==='PATCH'&&member)return send(200,auth.updateMember(actor,member[1],await input(req)));
       if(url.pathname==='/api/tasks'){if(req.method==='GET')return send(200,service.list(actor));if(req.method==='POST')return send(202,service.create(actor,await input(req)));}
+      const unitMatch=url.pathname.match(/^\/api\/tasks\/([\w-]{43})\/units\/(basic|whole|p[0-9]+(?:-5)?)$/);
+      if(req.method==='GET'&&unitMatch)return send(200,await service.unit(actor,unitMatch[1],unitMatch[2]));
+      const issuesMatch=url.pathname.match(/^\/api\/tasks\/([\w-]{43})\/issues$/);
+      if(req.method==='GET'&&issuesMatch)return send(200,await service.issues(actor,issuesMatch[1]));
       const match=url.pathname.match(/^\/api\/tasks\/([\w-]{43})(?:\/(review|conversion|refetch|export|assets)(?:\/([a-f0-9]{24}\.(?:png|jpg|gif|webp)))?)?$/);
       if(match){const [,id,action,asset]=match;
         if(req.method==='GET'&&!action)return send(200,await service.detail(actor,id));

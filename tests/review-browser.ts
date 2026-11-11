@@ -65,12 +65,16 @@ try{
  assert.ok(await evaluate("document.querySelector('.phase-nav').innerText.includes('副本基本信息 · 待审核')"));
  assert.ok(await evaluate("document.querySelector('.actions').innerText.includes('完整导出包含未通过部分')"));
  await waitFor("document.querySelector('.confirm input') !== null");
- await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='转换并保存 JSON').click()");await waitFor("document.getElementById('notice').textContent.includes('明确确认')");
- await evaluate("document.querySelector('.confirm input').checked=true;Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='转换并保存 JSON').click()");await waitFor("document.querySelector('#task a[href$=export]') !== null");
- const download=await evaluate("fetch(document.querySelector('#task a[href$=export]').href).then(async r=>({status:r.status,type:r.headers.get('content-type'),bytes:(await r.arrayBuffer()).byteLength}))");assert.equal(download.status,200);assert.equal(download.type,'application/x-tar');assert.ok(download.bytes>1024);
+ assert.ok(await evaluate("document.getElementById('task').innerText.includes('表现待确认') && !document.getElementById('task').innerText.includes('丢弃')"));
+ await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='导出攻略站文件').click()");await waitFor("document.getElementById('notice').textContent.includes('表现待确认')");
+ await evaluate("document.querySelector('.confirm input').checked=true;Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='导出攻略站文件').click()");await waitFor("document.querySelector('#task a[href$=export]') !== null");
+ assert.ok(await evaluate("document.querySelector('#task a[href$=export]').textContent.includes('攻略站页面与图片')"));
+ const download=await evaluate("fetch(document.querySelector('#task a[href$=export]').href).then(async r=>{const bytes=await r.arrayBuffer(),text=new TextDecoder().decode(bytes);return {status:r.status,type:r.headers.get('content-type'),bytes:bytes.byteLength,pages:text.includes('pages/p1.astro')&&text.includes('pages/p1-5.astro'),privateData:text.includes('snapshot.json')};})");assert.equal(download.status,200);assert.equal(download.type,'application/x-tar');assert.ok(download.bytes>1024);assert.equal(download.pages,true);assert.equal(download.privateData,false);
  await evaluate("Array.from(document.querySelectorAll('.phase-nav button')).find(x=>x.textContent.startsWith('P1阶段')).click()");await waitFor("document.querySelector('.preview img')?.complete");
  const repo=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');await mkdir(path.join(repo,'data','ui-check'),{recursive:true});
  const shot=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(path.join(repo,'data','ui-check','review-desktop.png'),Buffer.from(shot.data,'base64'));
+ await evaluate("document.querySelector('.actions').scrollIntoView()");
+ const exportShot=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(path.join(repo,'data','ui-check','review-export.png'),Buffer.from(exportShot.data,'base64'));
  await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await sleep(200);assert.ok(await evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'));
  await evaluate("Array.from(document.querySelectorAll('.phase-nav button')).find(x=>x.textContent.startsWith('P1.5')).click()");await waitFor("document.querySelector('.preview')?.innerText.includes('P1.5 独立正文')");
  await evaluate("document.getElementById('task').scrollIntoView()");await sleep(200);assert.ok(await evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'));
@@ -90,9 +94,23 @@ try{
  await evaluate("Array.from(document.querySelectorAll('.phase-nav button')).find(x=>x.textContent.startsWith('副本基本信息')).click()");
  assert.ok(await evaluate("document.querySelector('.phase-nav [aria-current=page]').textContent.includes('待审核')"));
  assert.ok(await evaluate("document.querySelector('.actions textarea').disabled"));
- assert.ok(await evaluate("!Array.from(document.querySelectorAll('.actions button')).some(x=>['审核通过','驳回','转换并保存 JSON','放弃本次转换'].includes(x.textContent))"));
+ assert.ok(await evaluate("!Array.from(document.querySelectorAll('.actions button')).some(x=>['审核通过','驳回','导出攻略站文件','放弃本次转换'].includes(x.textContent))"));
  assert.ok(await evaluate("document.querySelector('.actions').innerText.includes('取消')"));
+ // 预检失败统一进入必须修正，保留预览与驳回，不能审核通过。
+ f.service.generate=()=>{throw new Error('模拟导出格式不受支持');};
+ const cancelledTask=await evaluate("new URL(location.href).searchParams.get('task')");
+ await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='重新获取为新版本').click()");
+ await waitFor("new URL(location.href).searchParams.get('task')!=="+JSON.stringify(cancelledTask)+" && Array.from(document.querySelectorAll('#task button')).some(x=>x.textContent==='刷新任务')");await Promise.all([...f.service.jobs.values()]);
+ await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='刷新任务').click()");
+ await waitFor("document.querySelector('.preview') !== null && document.getElementById('task').innerText.includes('模拟导出格式不受支持')");
+ assert.ok(await evaluate("document.getElementById('task').innerText.includes('必须修正（1）')"));
+ await evaluate("Array.from(document.querySelectorAll('.phase-nav button')).find(x=>x.textContent.startsWith('P1阶段')).click()");
+ assert.ok(await evaluate("document.querySelector('.actions').innerText.includes('必须修正') && !Array.from(document.querySelectorAll('.actions button')).some(x=>['审核通过','导出攻略站文件'].includes(x.textContent))"));
+ await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='驳回').click()");
+ await waitFor("document.querySelector('.phase-nav [aria-current=page]')?.textContent.includes('已驳回')");
+ await evaluate("document.getElementById('task').scrollIntoView()");
+ const blockedShot=await call('Page.captureScreenshot',{format:'png'});await writeFile(path.join(repo,'data','ui-check','review-blocked.png'),Buffer.from(blockedShot.data,'base64'));
  f.state.denied=true;
  await evaluate("Array.from(document.querySelectorAll('#task button')).find(x=>x.textContent==='刷新任务').click()");await waitFor("document.querySelector('.preview') === null && document.getElementById('notice').innerText.includes('无权访问')");
- assert.deepEqual(errors,[]);console.log('浏览器验收通过：登录页、任务提交、分 P 缓存命中、草稿保留、加载动画、刷新定位、前进后退、图片失败与重试、单 P 审核导出、取消后动作同步、权限失效清理、排除确认、导出入口、移动端布局；使用模拟飞书服务');
+ assert.deepEqual(errors,[]);console.log('浏览器验收通过：登录页、任务提交、分 P 缓存命中、草稿保留、加载动画、刷新定位、前进后退、图片失败与重试、单 P 审核导出、取消后动作同步、两类问题与必须修正项驳回、权限失效清理、表现确认、导出入口、移动端布局；使用模拟飞书服务');
 }finally{ws?.close();proc.kill();await new Promise<void>(r=>server.close(()=>r()));f.store.close();}

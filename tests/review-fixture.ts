@@ -8,12 +8,11 @@ import { ReviewService } from '../src/review-service.ts';
 
 export const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZ1kAAAAASUVORK5CYII=', 'base64');
 export function rawBlocks() { return [
- {block_id:'doc',block_type:1,children:['p1','mechanic','text','image','timeline']},
+ {block_id:'doc',block_type:1,children:['p1','mechanic','text','image']},
  {block_id:'p1',parent_id:'doc',block_type:3,heading1:{elements:[{text_run:{content:'P1阶段'}}]}},
  {block_id:'mechanic',parent_id:'doc',block_type:4,heading2:{elements:[{text_run:{content:'测试机制'}}]}},
- {block_id:'text',parent_id:'doc',block_type:2,text:{elements:[{text_run:{content:'分摊后分散',text_element_style:{bold:true}}}]}},
- {block_id:'image',parent_id:'doc',block_type:27,image:{token:'imageToken',width:100,height:100}},
- {block_id:'timeline',parent_id:'doc',block_type:28,isv:{component_id:'timeline'}}
+ {block_id:'text',parent_id:'doc',block_type:2,text:{elements:[{text_run:{content:'分摊后分散',text_element_style:{bold:true,text_color:5}}}]}},
+ {block_id:'image',parent_id:'doc',block_type:27,image:{token:'imageToken',width:100,height:100}}
 ]; }
 export async function fixture() {
  const dataDir=await mkdtemp(path.join(os.tmpdir(),'mmw-review-test-'));

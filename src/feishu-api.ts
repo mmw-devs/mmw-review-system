@@ -11,7 +11,7 @@ export class ApiError extends Error {
 const fail = (message: string): never => { throw new ApiError('structure', message); };
 const node = (tag: string, id: string, children: (Node | string)[] = [], attrs: Record<string, string> = {}): Node => ({ tag, attrs: { id, ...attrs }, children });
 const digest = (v: string | Buffer) => createHash('sha256').update(v).digest('hex');
-export const READER_VERSION = 'openapi-1';
+export const READER_VERSION = 'openapi-2';
 export type ApiSnapshot = Snapshot & { snapshot_version: 2; reader: string; blocks: any[]; source: any; completeness: any; tree: Node };
 
 /** 所有网络请求限定官方 API；注入 fetch 仅供离线测试，不从网页接收上游地址。 */
@@ -79,12 +79,11 @@ export class FeishuApi {
     const tree = blocksToTree(blocks, id, before.title);
     const snapshot: ApiSnapshot = { snapshot_version: 2, reader: READER_VERSION, documentId: id, revision: before.revision_id, title: before.title, url: documentUrl(url), content: '', tree, blocks,
       source: { document_id: id, url: documentUrl(url), revision: before.revision_id, fetched_at: new Date().toISOString() }, images: {}, sheets: {}, completeness: { pages: pages.size + 1, blocks: blocks.length, relationships: true, revision: false } };
-    snapshot.sourceWarnings = blocks.flatMap(block => {
+    snapshot.sourceNotices = blocks.flatMap(block => {
       const messages: string[] = [];
-      if (JSON.stringify(block).includes('text_color')) messages.push('文字颜色枚举已映射到色系，具体色值与飞书主题的显示差异需核对');
       if (block.block_type === 31) messages.push('普通表格保留内容与行列关系，列宽和外观需要核对');
       if (block.block_type === 14) messages.push('代码正文保留，语言标识尚未映射');
-      return messages.map(reason => ({ code: 'DISPLAY', source: block.block_id, location: '来源文档', reason }));
+      return messages.map(reason => ({ code: 'PRESENTATION', source: block.block_id, location: '来源文档', reason }));
     });
     await mkdir(path.join(runDir, 'assets'), { recursive: true, mode: 0o700 });
     for (const block of blocks) {
@@ -100,7 +99,7 @@ export class FeishuApi {
           snapshot.images[block.block_id] = { error: error.message };
         }
       }
-      if (block.block_type === 30) snapshot.sheets[block.block_id] = { error: '原生电子表格的样式与版本读取尚未完成验证，需明确排除或取消转换' };
+      if (block.block_type === 30) snapshot.sheets[block.block_id] = { error: '该表格组件无法解析，请改为白名单支持的普通表格或图片' };
     }
     if ((await this.meta(id))?.revision_id !== before.revision_id) fail('读取期间文档版本变化，请重新获取');
     snapshot.completeness.revision = true; this.checkpoint();
@@ -126,7 +125,7 @@ export async function readLimited(response: Response, limit: number): Promise<Bu
   return Buffer.concat(chunks);
 }
 
-/** 将原始块转成现有转换器的节点；未知行内元素排除整块，防止丢掉局部语义。 */
+/** 将原始块转成现有转换器的节点；未知行内元素标记为无法解析并阻断正式产物。 */
 export function blocksToTree(blocks: any[], documentId: string, title: string): Node {
   const map = new Map<string, any>();
   for (const b of blocks) { if (!b?.block_id || map.has(b.block_id)) fail('原始块缺少标识或重复'); map.set(b.block_id, b); }
@@ -189,7 +188,8 @@ export function blocksToTree(blocks: any[], documentId: string, title: string): 
       if (t === 25) return node('column', id, children, b.grid_column?.width_ratio ? { 'width-ratio': String(b.grid_column.width_ratio) } : {});
       if (t === 27) {
         const attrs: Record<string, string> = {}; const image = b.image ?? {};
-        for (const key of Object.keys(image)) if (!['token', 'width', 'height', 'align', 'caption', 'scale'].includes(key)) throw new Error('图片含未适配的裁剪或变换属性');
+        for (const key of Object.keys(image)) if (!['token', 'width', 'height', 'align', 'caption', 'scale', 'crop'].includes(key)) throw new Error('图片属性不在白名单中，无法解析');
+        if (image.crop != null) attrs.crop = JSON.stringify(image.crop);
         for (const key of ['width', 'height', 'scale']) if (image[key] != null) attrs[key] = String(image[key]);
         if (image.caption?.content) attrs.caption = image.caption.content;
         if (image.align) { if (!align[image.align]) throw new Error('未知图片对齐方式'); attrs.align = align[image.align]; }
@@ -207,7 +207,7 @@ export function blocksToTree(blocks: any[], documentId: string, title: string): 
       if (t === 32) return node('td', id, children);
       if (t === 34) return node('quote', id, children);
       if (t === 19 && !b.callout?.background_color && !b.callout?.text_color && !b.callout?.border_color && !b.callout?.emoji_id) return node('callout', id, children);
-      return node('unsupported', id, children, { type: ({ 18: '多维表格', 19: '提示框样式', 20: '群名片', 21: '流程图', 23: '附件', 26: '嵌入网页', 28: '第三方组件（含时间轴组件）', 29: '思维笔记', 43: '画板', 46: '同步块', 47: '同步块引用' } as any)[t] ?? `未适配的飞书内容类型 ${t}` });
+      return node('unsupported', id, children, { type: `该组件无法解析（飞书类型 ${t}），请改为白名单支持的正文或图片` });
     } catch (e) { return node('unsupported', id, children, { type: e instanceof Error ? e.message : '未适配结构' }); }
   }
   const result = build(documentId); if (seen.size !== blocks.length) fail('存在未归属文档块，不能忽略'); return result;

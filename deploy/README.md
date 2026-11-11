@@ -1,12 +1,12 @@
 # 部署材料（尚未启用）
 
-本目录提供 H5 服务的 systemd、nginx、证书检查与续期模板，尚未在生产验证。提交或合并这些文件不代表已经安装、部署或发送告警。生产值仅保存在本地 `secrets/`、服务器配置或 GitHub Secrets 中。
+本目录提供 H5 服务的 systemd、nginx、证书检查与续期模板，尚未在生产验证。生产值仅保存在本地 `secrets/`、服务器配置或 GitHub Secrets 中。
 
 部署 workflow 默认关闭。只有仓库变量 `PRODUCTION_DEPLOY_ENABLED=true` 且运行分支为 `main` 时才执行；启用前需要完成下列准备并获得部署授权。PR 检查只执行离线测试。
 
 ## 运行条件与模板
 
-服务器需具备 Node.js 24 或以上、Git、Python 3、curl、OpenSSL、systemd、nginx 和支持 IP 证书的 Certbot。续期单元默认使用 `/snap/bin/certbot`，须核对实际路径并在本地调整。实际安装情况需另行核验；本目录不证明这些工具已经安装。
+服务器需具备 Node.js 24 或以上、Git、Python 3、curl、OpenSSL、systemd、nginx 和支持 IP 证书的 Certbot。续期单元默认使用 `/snap/bin/certbot`，须核对实际路径并在本地调整。实际安装情况需另行核验。
 
 | 文件 | 用途 |
 | --- | --- |
@@ -18,11 +18,11 @@
 | `mmw-cert-renew.service` / `.timer` | 每日两次调用 Certbot，由其判断是否续期 |
 | `alert.env.example` | 本地告警配置模板，Webhook 默认留空 |
 
-以下是部署准备顺序，不表示这些步骤已经执行。安装工具、改安全组、配置系统服务、签发证书和发送告警均需在部署授权范围内进行。
+以下是部署准备顺序。安装工具、改安全组、配置系统服务、签发证书和发送告警均需在部署授权范围内进行。
 
 ## 1. 准备入口与证书
 
-安全组仅向外开放所需的 80/443，应用端口 4325 保持本机监听。先配置 HTTP 模板及 `/var/www/letsencrypt`，检查 nginx 配置再加载。静态响应仅证明 HTTP 连通，不代表应用健康。
+安全组仅向外开放所需的 80/443，应用端口 4325 保持本机监听。先配置 HTTP 模板及 `/var/www/letsencrypt`，检查 nginx 配置再加载。分别检查 HTTP 连通性与应用健康状态。
 
 IP 证书使用 `shortlived`，有效期 160 小时；webroot 方式要求 Certbot 5.4 或以上，见 [Let's Encrypt 官方说明](https://letsencrypt.org/2026/03/11/shorter-certs-certbot/)。先核验官方安装来源和版本，不直接执行未核验的安装脚本。
 

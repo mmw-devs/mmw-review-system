@@ -16,17 +16,17 @@ const help = `飞书攻略 JSON 转换器
   --output <目录>            新任务的保存位置，默认 data/runs
   --prepare                  只获取、预检，不生成正式 JSON
   --resume <任务目录>        使用原快照继续，不重新读取飞书
-  --discard <清单摘要>       明确丢弃该摘要绑定的清单，必须配合 --resume
+  --confirm-presentation <摘要>  确认该次表现待确认清单，必须配合 --resume
   --cli-path <路径>          已安装飞书 CLI 或其 run.js
   --media-workdir <目录>     CLI 图片下载目录；Windows 下须为已存在的本地目录
   --identity user|bot        CLI 身份，默认 user
 
-有不支持内容时，交互终端会显示清单，输入 1 丢弃或 2 取消。
-非交互模式默认只保存预检记录；不会自动同意丢弃。
+仅维护白名单；无法解析的内容必须修改原文，不能丢弃后导出。
+表现待确认项需对照预览确认；非交互模式不会自动确认。
 `;
 function argsOf(argv: string[]) {
   const flags: Record<string, string | boolean> = {}, positional: string[] = [];
-  const valued = ['duty-id', 'duty-name', 'duty-type', 'profile', 'output', 'resume', 'discard', 'cli-path', 'media-workdir', 'identity'];
+  const valued = ['duty-id', 'duty-name', 'duty-type', 'profile', 'output', 'resume', 'confirm-presentation', 'cli-path', 'media-workdir', 'identity'];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (!arg.startsWith('--')) { positional.push(arg); continue; }
@@ -55,7 +55,7 @@ async function main(): Promise<number> {
     } catch { throw new Error('无法读取任务快照或报告，请检查任务目录'); }
     if (previous.status === 'cancelled') throw new Error('本次转换已取消，请重新发起任务');
   } else {
-    if (flags.discard) throw new Error('请先查看预检清单，再使用 --resume 和 --discard 确认具体清单');
+    if (flags['confirm-presentation']) throw new Error('请先查看预检清单，再使用 --resume 和 --confirm-presentation 确认表现');
     if (!url || !flags['duty-id'] || !flags['duty-name']) throw new Error('需要文档地址、副本短 ID 和副本名称；使用 --help 查看用法');
     documentUrl(url);
     if (!/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(String(flags['duty-id'])) || !String(flags['duty-name']).trim()) throw new Error('副本 ID 或名称格式无效');
@@ -81,32 +81,31 @@ async function main(): Promise<number> {
   }
   const result = convert(snapshot, options);
   if (previous && previous.digest !== result.digest && !flags.prepare) throw new Error('快照、规则或清单已变化，旧选择无效；可使用 --resume 配合 --prepare 重新预检并确认新清单');
-  const report: any = { version: 1, createdAt: previous?.createdAt ?? new Date().toISOString(), options, digest: result.digest, snapshotHash: fingerprint(snapshot), unsupported: result.unsupported, warnings: result.warnings, blockers: result.blockers, status: 'pending' };
+  const report: any = { version: 1, createdAt: previous?.createdAt ?? new Date().toISOString(), options, digest: result.digest, snapshotHash: fingerprint(snapshot), notices: result.notices, blockers: result.blockers, status: 'pending' };
   if (await stat(path.join(runDir, 'strategy.json')).then(() => true, () => false)) throw new Error('此任务已有正式产物，不覆盖已有文件');
   await save(path.join(runDir, 'report.json'), report);
   await save(path.join(runDir, 'candidate.json'), result.document);
-  console.log(`预检：${result.unsupported.length} 项不支持内容，${result.warnings.length} 项提示，${result.blockers.length} 项阻断问题。`);
-  for (const item of result.unsupported) console.log(`- ${item.location}；来源 ${item.source}；${item.reason}`);
-  for (const item of result.blockers) console.log(`阻断：${item.location}；${item.reason}`);
-  if (result.warnings.length) console.log(`展示与标题提示已保存至 report.json，请核对。`);
+  console.log(`预检：${result.notices.length} 项表现待确认，${result.blockers.length} 项必须修正。`);
+  for (const item of result.notices) console.log(`表现待确认：${item.location}；来源 ${item.source}；${item.reason}`);
+  for (const item of result.blockers) console.log(`必须修正：${item.location}；来源 ${item.source}；${item.reason}`);
   if (result.blockers.length) { report.status = 'blocked'; await save(path.join(runDir, 'report.json'), report); return 1; }
   if (flags.prepare) { console.log(`预检完成；尚未生成正式 JSON。清单摘要：${result.digest}`); return 2; }
-  let decision = 'no-exclusions';
-  if (result.unsupported.length) {
-    if (flags.discard) {
-      if (flags.discard !== result.digest) throw new Error('确认摘要与当前清单不一致');
-      decision = 'discard';
+  let decision = 'no-presentation-notices';
+  if (result.notices.length) {
+    if (flags['confirm-presentation']) {
+      if (flags['confirm-presentation'] !== result.digest) throw new Error('确认摘要与当前清单不一致');
+      decision = 'presentation-confirmed';
     } else if (stdin.isTTY && stdout.isTTY) {
       const terminal = createInterface({ input: stdin, output: stdout });
       try {
-        const answer = await terminal.question('请选择：1 丢弃清单内内容，只转换其他内容；2 放弃本次转换。输入其他内容保持等待：');
-        if (answer.trim() === '1') decision = 'discard';
+        const answer = await terminal.question('请选择：1 已核对表现并确认可接受；2 放弃本次转换。其他输入保持等待：');
+        if (answer.trim() === '1') decision = 'presentation-confirmed';
         else if (answer.trim() === '2') {
           report.status = 'cancelled'; report.decisionAt = new Date().toISOString(); await save(path.join(runDir, 'report.json'), report);
-          console.log('已放弃本次转换，未生成或覆盖正式 JSON。'); return 2;
+          console.log('已放弃本次转换，未生成正式 JSON。'); return 2;
         } else { console.log('尚未确认，保留预检记录。'); return 2; }
       } finally { terminal.close(); }
-    } else { console.log(`需要明确确认。清单摘要：${result.digest}\n查看 report.json 后，可用 --resume <任务目录> --discard <清单摘要> 继续。`); return 2; }
+    } else { console.log(`请先核对表现，再使用 --resume <任务目录> --confirm-presentation <摘要> 继续。摘要：${result.digest}`); return 2; }
   }
   const failures = validateStrategy(result.document);
   if (failures.length) throw new Error('最终校验未通过，未输出攻略');
@@ -120,7 +119,7 @@ async function main(): Promise<number> {
   catch { throw new Error('无法安全发布文件，完整候选已保留；未覆盖已有正式产物'); }
   report.status = 'completed';
   await save(path.join(runDir, 'report.json'), report);
-  console.log(`${decision === 'discard' ? '已转换，按确认清单排除部分内容' : '转换完成'}：${path.join(runDir, 'strategy.json')}`);
+  console.log(`转换完成：${path.join(runDir, 'strategy.json')}`);
   return 0;
 }
 

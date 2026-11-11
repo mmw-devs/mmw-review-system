@@ -23,7 +23,7 @@ test('当前两个完整示例通过结构与关联校验', () => {
 });
 test('富文本、顺序、多解法、内部备注及稳定标识', () => {
   const input = snapshot(stage + '<p id="text"><b><span text-color="rgb(255,0,0)">红色</span></b><br/><del>旧文字</del></p><h3 id="s1">解法：A（推荐）</h3><p id="a">A正文</p><h4 id="note">治疗职能注意</h4><p id="n">留在A</p><h3 id="s2">解法：B（Beta）</h3><p id="b">B正文</p>');
-  const r = convert(input, options); assert.deepEqual(r.blockers, []); assert.deepEqual(r.unsupported, []);
+  const r = convert(input, options); assert.deepEqual(r.blockers, []); assert.ok(r.notices.some(x=>x.reason.includes('文字颜色')));
   const sections = r.document.phase_contents[0].sections;
   assert.equal(sections[1].content[0].content[0].style.color, '#ff0000');
   assert.equal(sections[2].type, 'multi_solution');
@@ -33,16 +33,18 @@ test('富文本、顺序、多解法、内部备注及稳定标识', () => {
   const renamed = convert({ ...input, content: input.content.replace('机制</h2>', '改名</h2>') }, options);
   assert.equal(renamed.document.phases[0].mechanics[0].id, r.document.phases[0].mechanics[0].id);
 });
-test('不支持组件、视频、裁剪图片均列清单；普通文字时间轴保留', () => {
-  const r = convert(snapshot(stage + para + '<readonly-block id="timeline" type="isv"/><video id="v"/><img id="crop" crop="0,0,1,1"/><p id="time">时间轴：00:10 全屏攻击</p>'), options);
-  assert.equal(r.unsupported.length, 3); assert.deepEqual(r.blockers, []);
-  assert.ok(JSON.stringify(r.document).includes('00:10'));
-  assert.ok(!JSON.stringify(r.document).includes('embed'));
+test('白名单外组件一律阻断；裁剪原图列为表现待确认，普通时间轴文字保留', () => {
+  const input=snapshot(stage + para + '<readonly-block id="timeline" type="isv"/><future-component id="future"/><img id="crop" crop="0,0,1,1"/><p id="time">时间轴：00:10 全屏攻击</p>');
+  input.images.crop={src:'assets/crop.png'};
+  const r=convert(input,options);
+  assert.equal(r.blockers.length,2);assert.ok(r.blockers.every(x=>x.code==='NOT_IN_WHITELIST'));
+  assert.ok(r.notices.some(x=>x.source==='crop'&&x.reason.includes('完整原图')));
+  assert.ok(JSON.stringify(r.document).includes('00:10'));assert.ok(JSON.stringify(r.document).includes('assets/crop.png'));
+  assert.equal('unsupported' in r,false);assert.equal('warnings' in r,false);
 });
-test('容器整体排除必须扩大明确清单，不留下空表格或单列分栏', () => {
-  const r = convert(snapshot(stage + para + '<grid id="grid"><column id="col1"><video id="v"/></column><column id="col2"><p>其他</p></column></grid>'), options);
-  assert.ok(r.unsupported.some(x => x.source === 'grid'));
-  assert.deepEqual(r.blockers, []);
+test('嵌套未知内容阻断整个任务，不能导出缺失单元格或单列分栏', () => {
+  const r=convert(snapshot(stage+para+'<grid id="grid"><column id="col1"><future-component id="x"/></column><column id="col2"><p>其他</p></column></grid>'),options);
+  assert.ok(r.blockers.some(x=>x.source==='x'));assert.ok(r.blockers.some(x=>x.source==='grid'));
 });
 test('无阶段、阶段重复、全局内容交错会阻断', () => {
   for (const content of [para, stage + para + '<h1 id="again">P1</h1>', stage + para + '<h1 id="intro">攻略须知</h1><p>结尾</p>']) assert.ok(convert(snapshot(content), options).blockers.length);
@@ -82,7 +84,7 @@ test('地址与图片签名检查拒绝非法来源', () => {
 });
 test('嵌套列表的富文本和原始代码空白保留', () => {
   const r = convert(snapshot(stage + '<ul id="l"><li><b>加粗</b><ul><li>下一层</li></ul>后续</li></ul><pre id="code"><code>  /echo 原文\n\n</code></pre>'), options);
-  assert.deepEqual(r.unsupported, []); assert.deepEqual(r.blockers, []);
+  assert.deepEqual(r.blockers, []);
   const body = r.document.phase_contents[0].sections[1].content;
   assert.equal(body[0].items[0][0].content[0].style.bold, true);
   assert.equal(body[0].items[0][1].type, 'list');
@@ -109,20 +111,20 @@ console.log(JSON.stringify({ok:true,data}));`);
 });
 test('快照改变后旧摘要失效；重新预检不能借旧授权导出', () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'mmw-digest-'));
-  const input = snapshot(stage + para + '<video id="v"/>'), r = convert(input, options);
+  const input = snapshot(stage + '<p><span text-color="#245bdb">说明</span></p>'), r = convert(input, options);
   writeFileSync(path.join(dir, 'report.json'), JSON.stringify({ options, digest: r.digest, status: 'pending' }));
-  input.content += '<audio id="a"/>';
+  input.content += '<p>新内容</p>';
   writeFileSync(path.join(dir, 'snapshot.json'), JSON.stringify(input));
   const cli = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
   const run = (...args: string[]) => spawnSync(process.execPath, [cli, '--resume', dir, ...args], { encoding: 'utf8' });
-  assert.equal(run('--discard', r.digest).status, 1);
+  assert.equal(run('--confirm-presentation', r.digest).status, 1);
   assert.equal(run('--prepare').status, 2);
-  assert.equal(run('--discard', r.digest).status, 1);
+  assert.equal(run('--confirm-presentation', r.digest).status, 1);
   assert.equal(existsSync(path.join(dir, 'strategy.json')), false);
 });
-test('命令行没有授权不输出，错误摘要拒绝，确认后输出且不覆盖', () => {
+test('命令行表现未确认不输出，错误摘要拒绝，确认后输出且不覆盖', () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'mmw-cli-test-'));
-  const input = snapshot(stage + para + '<video id="video"/>');
+  const input = snapshot(stage + '<p><span text-color="#245bdb">彩色正文</span></p>');
   const result = convert(input, options);
   writeFileSync(path.join(dir, 'snapshot.json'), JSON.stringify(input));
   writeFileSync(path.join(dir, 'report.json'), JSON.stringify({ options, digest: result.digest, status: 'pending' }));
@@ -130,10 +132,10 @@ test('命令行没有授权不输出，错误摘要拒绝，确认后输出且�
   const run = (...args: string[]) => spawnSync(process.execPath, [cli, '--resume', dir, ...args], { encoding: 'utf8' });
   assert.equal(run().status, 2);
   assert.equal(existsSync(path.join(dir, 'strategy.json')), false);
-  assert.equal(run('--discard', 'wrong').status, 1);
-  const success = run('--discard', result.digest); assert.equal(success.status, 0, success.stderr);
+  assert.equal(run('--confirm-presentation', 'wrong').status, 1);
+  const success = run('--confirm-presentation', result.digest); assert.equal(success.status, 0, success.stderr);
   assert.deepEqual(validateStrategy(JSON.parse(readFileSync(path.join(dir, 'strategy.json'), 'utf8'))), []);
-  assert.equal(run('--discard', result.digest).status, 1);
+  assert.equal(run('--confirm-presentation', result.digest).status, 1);
 });
 
 
@@ -147,5 +149,24 @@ test('半阶段独立切分，转场和容器内部标题留在原 P，顺序不
  assert.deepEqual(legacy.blockers,[]);assert.equal(legacy.document.phases[1].mechanics.length,2);
  const repeated=convert(snapshot('<h1>P1</h1><p>A</p><h1>P1.5</h1><p>B</p><h1>P2</h1><p>C</p><h1>P1.5</h1><p>D</p>'),options);assert.ok(repeated.blockers.length);
  const reversed=convert(snapshot('<h1>P2</h1><p>A</p><h1>P1.5</h1><p>B</p>'),options);assert.deepEqual(reversed.document.phases.map((p:any)=>p.id),['p2','p1-5']);
- const issues=convert(snapshot('<h1>P1.5</h1><p>A</p><unsupported id="u"/>'),options);assert.equal(issues.unsupported[0].unitId,'p1-5');
+ const issues=convert(snapshot('<h1>P1.5</h1><p>A</p><unsupported id="u"/>'),options);assert.equal(issues.blockers[0].unitId,'p1-5');
+});
+
+
+test('命令行不能通过旧丢弃参数或表现确认绕过必须修正项',()=>{
+ const dir=mkdtempSync(path.join(tmpdir(),'mmw-whitelist-cli-')),input=snapshot(stage+para+'<future-component id="x"/>'),result=convert(input,options);
+ writeFileSync(path.join(dir,'snapshot.json'),JSON.stringify(input));writeFileSync(path.join(dir,'report.json'),JSON.stringify({options,digest:result.digest,status:'pending'}));
+ const cli=fileURLToPath(new URL('../src/cli.ts',import.meta.url));
+ for(const extra of [[],['--discard',result.digest],['--confirm-presentation',result.digest]]){
+  const run=spawnSync(process.execPath,[cli,'--resume',dir,...extra],{encoding:'utf8'});assert.equal(run.status,1);assert.equal(existsSync(path.join(dir,'strategy.json')),false);
+ }
+});
+
+
+test('容器、单元格和结构标题的未知属性不能被静默忽略，标题颜色提示定位到原块',()=>{
+ for(const xml of ['<table future="x"><tr><td><p>正文</p></td></tr></table>','<table><tr><td future="x"><p>正文</p></td></tr></table>','<ul><li future="x">文字</li></ul>','<h2 future="x">新机制</h2>']){
+  assert.ok(convert(snapshot(stage+para+xml),options).blockers.some(i=>i.reason.includes('白名单')));
+ }
+ const r=convert(snapshot('<h1 id="p1"><span text-color="#245bdb">P1</span></h1><p>正文</p>'),options);
+ assert.equal(r.blockers.length,0);assert.ok(r.notices.some(i=>i.source==='p1'));
 });

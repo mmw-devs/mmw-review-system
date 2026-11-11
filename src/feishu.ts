@@ -92,11 +92,11 @@ export class Feishu {
     await Promise.all(Array.from({ length: 3 }, async () => {
       while (cursor < jobs.length) {
         const n = jobs[cursor++], blockId = n.attrs.id;
-        if (!blockId) throw new Error('资源缺少来源定位，无法安全列出排除清单');
+        if (!blockId) throw new Error('资源缺少来源定位，无法定位必须修正项');
         if (n.tag === 'sheet') {
           try { snapshot.sheets[blockId] = await this.sheet(n); }
           catch (e) { snapshot.sheets[blockId] = { error: e instanceof Error ? e.message : '表格获取失败' }; }
-        } else if (!n.attrs.crop) {
+        } else {
           try {
             const token = n.attrs.src;
             if (!/^[a-zA-Z0-9]+$/.test(token ?? '')) throw new Error('图片来源不是可识别的飞书资源');
